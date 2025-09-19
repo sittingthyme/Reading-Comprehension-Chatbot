@@ -1,0 +1,15 @@
+export const SPONGEBOB_IMG = import.meta.env.VITE_SPONGEBOB
+export const PO_IMG = import.meta.env.VITE_PO
+export const KRATOS_IMG = import.meta.env.VITE_KRATOS
+export const NARUTO_IMG = import.meta.env.VITE_NARUTO
+export const PETER_IMG = import.meta.env.VITE_PETER
+export const ELSA_IMG = import.meta.env.VITE_ELSA
+export const GERONIMO_IMG = import.meta.env.VITE_GER
+export const HERMIONE_IMG = import.meta.env.VITE_HERMIONE
+export const RAVEN_IMG = import.meta.env.VITE_RAVEN
+export const SAKURA_IMG = import.meta.env.VITE_SAKURA
+export const SONIC_IMG = import.meta.env.VITE_SONIC
+export const MASTER_IMG = import.meta.env.VITE_MASTER
+export const LUZ_IMG = import.meta.env.VITE_LUZ
+export const NATHAN_IMG = import.meta.env.VITE_NATHAN
+export const ANNABETH_IMG = import.meta.env.VITE_ANNABETH

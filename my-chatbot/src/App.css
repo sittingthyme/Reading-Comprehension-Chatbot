@@ -1,0 +1,250 @@
+/* Center the entire app container */
+.app-container {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  margin: 0 auto;          /* was: margin-left: 350px; */
+  box-sizing: border-box;
+  padding: 16px;
+  max-width: 1400px;       /* keeps super-wide screens tidy */
+}
+
+/* Character selection wrapper */
+.character-selection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* 🔥 Use CSS Grid so more cards fit per row, responsively */
+.character-grid {
+  display: grid; 
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); 
+  gap: 50px;
+  width: 100%;             /* was: 200% (causes overflow) */
+  max-width: 1200px; 
+  padding: 16px; 
+  box-sizing: border-box;
+}
+
+/* Make cards flexible (not fixed 250px) and a bit denser */
+.character-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: auto;             /* was: 250px */
+  min-width: 180px;        /* matches minmax above */
+  padding: 12px;
+  border-radius: 12px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  text-align: center;
+  background: #fff;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.character-card:hover {
+  transform: translateY(-2px) scale(1.03);
+  box-shadow: 0 6px 14px rgba(0,0,0,0.18);
+}
+
+/* Tighten typography to fit more cards */
+.character-card h3 {
+  font-size: 1rem;
+  margin: 8px 0 6px;
+  line-height: 1.2;
+}
+.character-card p {
+  font-size: 0.9rem;
+  line-height: 1.3;
+  margin: 0 0 8px;
+  display: -webkit-box;         /* clamp to keep cards short */
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Make images a bit smaller so more cards fit comfortably */
+.character-image {
+  width: 112px;                 /* was: 150px */
+  height: 112px;
+  object-fit: cover;
+  border-radius: 50%;
+  margin: 8px 0;
+  cursor: pointer;
+}
+
+
+/* Center chat container */
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* Center messages */
+.messages {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Center input area */
+.input-area {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+/* Style the input to be centered */
+.input-area input {
+  width: 70%;
+  padding: 10px;
+  border-radius: 20px;
+  border: 1px solid #ccc;
+}
+
+/* Style the send button */
+.input-area button {
+  padding: 10px 20px;
+  border-radius: 20px;
+  border: none;
+  background-color: #4CAF50;
+  color: white;
+  cursor: pointer;
+}
+
+/* Center character header */
+.character-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+/* Center the change character button */
+.change-character {
+  margin-top: 20px;
+  padding: 10px 20px;
+  border-radius: 20px;
+  border: none;
+  background-color: #f44336;
+  color: white;
+  cursor: pointer;
+}
+
+/* Center images */
+.character-image {
+  width: 150px;
+  height: 150px;
+  object-fit: cover;
+  border-radius: 50%;
+  margin: 10px 0;
+  cursor: pointer;
+}
+.character-card:hover {
+  transform: scale(1.05);
+  transition: transform 0.2s ease;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+/* Message container styles */
+.messages {
+  width: 100%;
+  max-width: 600px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Base message style */
+.message {
+  max-width: 70%;
+  padding: 12px 16px;
+  border-radius: 18px;
+  line-height: 1.4;
+  position: relative;
+  word-wrap: break-word;
+}
+
+/* Bot messages (left side) */
+.message.bot {
+  align-self: flex-start;
+  background-color: #f1f1f1;
+  border-bottom-left-radius: 4px;
+  color: #000;
+  margin-right: auto;
+}
+
+/* User messages (right side) */
+.message.user {
+  align-self: flex-end;
+  background-color: #0084ff;
+  border-bottom-right-radius: 4px;
+  color: white;
+  margin-left: auto;
+}
+
+/* Loading indicator */
+.message.bot.typing {
+  background-color: #f1f1f1;
+  color: #999;
+  font-style: italic;
+  padding: 8px 16px;
+}
+
+/* Character header */
+.character-header {
+  text-align: center;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eee;
+}
+
+/* Input area styling */
+.input-area {
+  display: flex;
+  width: 100%;
+  max-width: 600px;
+  padding: 10px;
+  gap: 10px;
+  background-color: #f9f9f9;
+  border-radius: 25px;
+  margin-top: 20px;
+}
+
+.input-area input {
+  flex-grow: 1;
+  padding: 12px 15px;
+  border-radius: 25px;
+  border: 1px solid #ddd;
+  outline: none;
+}
+
+.input-area button {
+  padding: 12px 20px;
+  border-radius: 25px;
+  border: none;
+  background-color: #0084ff;
+  color: white;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+
+html, body {
+  height: 100%;
+}
+body {
+  margin: 0;
+  /* If you want full-page vertical centering, keep the next 2 lines.
+     If you only want horizontal centering, delete them. */
+  display: grid;
+  place-items: center;  /* centers the app both ways when content is short */
+}
