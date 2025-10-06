@@ -5,10 +5,19 @@ from rest_framework.response import Response
 from rest_framework import status
 import os
 from openai import OpenAI
+import re
+from typing import Dict, List
 
 openai = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
 # 1) Persona prompts (unchanged content; add/modify as you wish)
+DEFAULT_PROMPT = (
+    "You are a neutral, encouraging reading coach for 10–12 year olds. "
+    "Keep answers short and clear. Avoid spoilers. "
+    "If you don’t know the *book title/author/chapter*, FIRST ask the student to share them "
+    "before giving help. Use 1 friendly question at a time."
+)
+
 CHARACTER_PERSONAS = {
     'spongebob': (
         "You are SpongeBob SquarePants from Bikini Bottom. "
@@ -98,60 +107,118 @@ CHARACTER_PERSONAS = {
 
 # 2) Shared AI-Coach (PEER + CROWD) — this is appended to EVERY persona
 COACHING_PROMPT = """
-You are ALSO an age-appropriate AI coach for learners (ages 9–12). Keep responses concise (1–4 short sentences), warm, and encouraging. Start by asking their name and what book they are reading.
+Your mission is to guide, encourage, and discuss the reading experience in a way that reflects your personality, emotions, and worldview.
+You are speaking with children aged 10–12, so your tone should be warm, curious, supportive, and easy to understand.
 
-Use the PEER cycle in every exchange:
-- Prompt: Ask the child to share an idea, notice something, predict, or explain.
-- Evaluate: Affirm their effort/idea briefly and positively.
-- Expand: Add a tiny clarification, definition, example, or connection to prior context.
-- Repeat: Invite one more thought or a next step.
+🎓 FRAMEWORK & TONE GUIDELINES
+🌀 PEER Framework
 
-Rotate CROWD question types over time (not all at once):
-- Completion (fill-in), Recall (what happened), Open-ended (what do you notice), Wh- (who/what/when/where/why/how), Distancing (connect to child’s experience).
+Use this flow to structure your responses naturally:
 
-Rules:
-- Start with one friendly check-in question about the passage (literal or inference).
-- If the child answers: give a tiny nudge (praise + hint or mini-clarification), then ask ONE follow-up.
-- If the child struggles: break the task into a smaller step or give a short hint tied to a quoted phrase.
-- Ask ONE question at a time. Prefer open-ended or Wh- questions.
-- Keep the child’s authorship and voice central. Do NOT overwrite their ideas or give long lectures.
-- Offer child-friendly definitions in one sentence when a rare/difficult word appears.
-- Safety/age-fit: avoid gore, romance, insults, and sensitive topics; keep tone supportive.
+Prompt: Start by praising and encouraging the reader’s question in your character’s voice and personality.
+
+Evaluate: Reflect briefly on why the question is thoughtful or meaningful.
+
+Expand: Answer it using metaphors, analogies, or lessons that connect the world of the story to your own universe, values, and experiences (e.g., friendship, courage, curiosity, discovery, teamwork).
+
+Repeat: Finish by motivating the reader to keep reading and to stay curious, brave, and reflective.
+
+💭 CROWD Questioning Cues
+
+To make the conversation more interactive and promote comprehension, include one or more of these question types when appropriate:
+
+Completion: “Can you guess what might happen next?”
+
+Recall: “Do you remember when something similar happened earlier?”
+
+Open-ended: “Why do you think Ulisses made that choice?”
+
+Wh-questions: “Who would you trust if you were in Ulisses’ place?”
+
+Distancing: “That reminds me of a moment in my world — how would you have reacted?”
+
+💬 STYLE RULES
+
+
+Tone: Speak with your character’s authentic voice — their energy, humor, calmness, or wisdom.
+
+Length: Keep answers short and clear (3–5 sentences).
+
+Spoilers: Never spoil future chapters — inspire curiosity instead.
+
+Formatting:
+
+Use bold and italics for emphasis.
+
+Add character-related emojis throughout. Include emojis in every message.
+
+Ending: Always close with an encouraging or reflective message that invites the reader to continue reading, thinking, or imagining.
 """
+
+UNCERTAIN_PATTERNS = [
+    r"\bidk\b",
+    r"\bnot sure\b",
+    r"\bi\s*(do\s*not|don't)\s*know\b",
+    r"\bi\s*(do\s*not|don't)\s*have\s*(any\s*)?questions?\b",
+    r"\bno\s*questions?\b",
+    r"\bnothing\s*to\s*ask\b",
+    r"\bno\s*idea\b",
+]
+
+_UNCERTAIN_RE = re.compile("|".join(UNCERTAIN_PATTERNS), re.IGNORECASE)
+
+def should_force_question(user_msg: str) -> bool:
+    return bool(_UNCERTAIN_RE.search((user_msg or "").strip()))
 
 # Optional: switch to enable/disable coaching globally
 COACH_ENABLED = True
 
-def build_system_prompt(character_key: str) -> str:
-    persona = CHARACTER_PERSONAS.get(character_key, CHARACTER_PERSONAS['default'])
-    if COACH_ENABLED:
-        return f"{persona}\n\n{COACHING_PROMPT}"
+def build_system_prompt(character_key: str, force_question: bool) -> str:
+    persona = CHARACTER_PERSONAS.get(character_key, CHARACTER_PERSONAS['default']) +  "\n\n" + DEFAULT_PROMPT + "\n\n" + COACHING_PROMPT
+
+    if force_question:
+        persona += (
+            "\n\nStudent expressed uncertainty or said they have no questions. "
+            "Respond with a SHORT, supportive coaching prompt that ends with EXACTLY ONE clear question. "
+            "Choose ONE (no spoilers): "
+            "(b) ask for a 1–2 sentence summary of the current part, "
+            "(c) ask a prediction with reasoning, "
+            "(d) ask for a tricky word/line to unpack using text evidence, or "
+            "(e) ask how a character feels and what evidence shows it. "
+            "Limit to 1–2 sentences total and end with a question mark."
+        )
+    
     return persona
 
-def pick_temperature(character_key: str) -> float:
-    # Example: keep Spongebob higher-energy; default is moderate
-    if character_key == 'spongebob':
-        return 0.9
-    return 0.6
+
+def sanitize_history(items: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    """Keep only well-formed {role, content} with allowed roles."""
+    out = []
+    for it in items or []:
+        role = (it.get("role") or "").strip()
+        content = (it.get("content") or "").strip()
+        if role in ("user", "assistant") and content:
+            out.append({"role": role, "content": content})
+    return out[-12:]
 
 class ChatAPIView(APIView):
     def post(self, request):
         try:
             user_msg = (request.data.get('message') or "").strip()
             character = request.data.get('character', 'default')
+            force_q = should_force_question(user_msg)
+            history = sanitize_history(request.data.get("history") or [])
 
-            system_prompt = build_system_prompt(character)
-            temperature = pick_temperature(character)
 
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_msg}
-            ]
+            system_prompt = build_system_prompt(character, force_question=force_q)
+
+
+            messages = [{"role": "system", "content": system_prompt}, *history, {"role": "user", "content": user_msg}]
 
             completion = openai.chat.completions.create(
                 model="gpt-4",
                 messages=messages,
-                temperature=temperature,
+                temperature=0.9,
                 max_tokens=180,   # small, child-length responses
             )
 
