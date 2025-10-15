@@ -1,25 +1,37 @@
 # views.py
-from django.shortcuts import render
+from __future__ import annotations
+
+from django.shortcuts import render  # optional; keep if you use render elsewhere
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+
 import os
-from openai import OpenAI
 import re
-from typing import Dict, List
+from typing import Dict, List, Optional
+from openai import OpenAI
+from .scaffold_policy import LadderPolicy, Move, render_move  # <-- new
 
-openai = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+# ------------------------------
+# OpenAI client
+# ------------------------------
+openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# 1) Persona prompts (unchanged content; add/modify as you wish)
+# ------------------------------
+# 1) Persona prompts (you can extend/trim)
+# ------------------------------
 DEFAULT_PROMPT = (
+    "Make the first question about what book they are currently reading. "
     "You are a neutral, encouraging reading coach for 10–12 year olds. "
-    "Keep answers short and clear. Avoid spoilers. "
-    "If you don’t know the *book title/author/chapter*, FIRST ask the student to share them "
-    "before giving help. Use 1 friendly question at a time."
+    "Keep answers short and clear (3–5 sentences total). Avoid spoilers. "
+    "Ask exactly one friendly question at the end. Use emojis related to the character and response regularly."
 )
 
-CHARACTER_PERSONAS = {
-    'spongebob': (
+CHARACTER_PERSONAS: Dict[str, str] = {
+   'spongebob': (
         "You are SpongeBob SquarePants from Bikini Bottom. "
         "Respond in an extremely cheerful, optimistic, and slightly naive manner. "
         "Use phrases like 'Oh boy!', 'I'm ready!', and 'Meow!' (even though you're not a cat). "
@@ -105,46 +117,25 @@ CHARACTER_PERSONAS = {
     'default': "You are a helpful assistant."
 }
 
-# 2) Shared AI-Coach (PEER + CROWD) — this is appended to EVERY persona
+# 2) Shared AI-Coach (PEER + CROWD) — appended to EVERY persona
 COACHING_PROMPT = """
-Your mission is to guide, encourage, and discuss the reading experience in a way that reflects your personality, emotions, and worldview.
-You are speaking with children aged 10–12, so your tone should be warm, curious, supportive, and easy to understand.
+🎓 FRAMEWORK & TONE
+- Audience: children ages 10–12; warm, curious, supportive, easy to understand.
+- Length: 3–5 short sentences total. Avoid spoilers.
+- End with exactly ONE question inviting the child’s next step.
 
-🎓 FRAMEWORK & TONE GUIDELINES
 🌀 PEER Framework
+- Prompt: Praise/encourage the child’s thought or question in your character’s voice.
+- Evaluate: Reflect briefly on why their idea is interesting.
+- Expand: Use a metaphor/analogy or a lesson from your world (friendship, courage, curiosity, teamwork).
+- Repeat: Motivate them to keep reading and exploring.
 
-Use this flow to structure your responses naturally:
-
-Prompt: Start by praising and encouraging the reader’s question in your character’s voice and personality.
-
-Evaluate: Reflect briefly on why the question is thoughtful or meaningful.
-
-Expand: Answer it using metaphors, analogies, or lessons that connect the world of the story to your own universe, values, and experiences (e.g., friendship, courage, curiosity, discovery, teamwork).
-
-Repeat: Finish by motivating the reader to keep reading and to stay curious, brave, and reflective.
-
-💭 CROWD Questioning Cues
-
-To make the conversation more interactive and promote comprehension, include one or more of these question types when appropriate:
-
-Completion: “Can you guess what might happen next?”
-
-Recall: “Do you remember when something similar happened earlier?”
-
-Open-ended: “Why do you think Ulisses made that choice?”
-
-Wh-questions: “Who would you trust if you were in Ulisses’ place?”
-
-Distancing: “That reminds me of a moment in my world — how would you have reacted?”
-
-💬 STYLE RULES
-
-
-Tone: Speak with your character’s authentic voice — their energy, humor, calmness, or wisdom.
-
-Length: Keep answers short and clear (3–5 sentences).
-
-Spoilers: Never spoil future chapters — inspire curiosity instead.
+💭 CROWD Questioning Cues (pick one when helpful)
+- Completion: “What might happen next?”
+- Recall: “Do you remember something similar earlier?”
+- Open-ended: “Why do you think the character did that?”
+- Wh-questions: “Who/What/When/Where/Why/How …?”
+- Distancing: “How would you react if you were there?”
 
 Formatting:
 
@@ -155,16 +146,12 @@ Add character-related emojis throughout. Include emojis in every message.
 Ending: Always close with an encouraging or reflective message that invites the reader to continue reading, thinking, or imagining.
 """
 
+# If a child says “idk/no questions/etc.” we ask a short coaching prompt with one clear question
 UNCERTAIN_PATTERNS = [
-    r"\bidk\b",
-    r"\bnot sure\b",
-    r"\bi\s*(do\s*not|don't)\s*know\b",
-    r"\bi\s*(do\s*not|don't)\s*have\s*(any\s*)?questions?\b",
-    r"\bno\s*questions?\b",
-    r"\bnothing\s*to\s*ask\b",
-    r"\bno\s*idea\b",
+    r"\bidk\b", r"\bnot sure\b", r"\bi\s*(do\s*not|don't)\s*know\b",
+    r"\bi\s*(do\s*not|don't)\s*have\s*(any\s*)?questions?\b", r"\bno\s*questions?\b",
+    r"\bnothing\s*to\s*ask\b", r"\bno\s*idea\b",
 ]
-
 _UNCERTAIN_RE = re.compile("|".join(UNCERTAIN_PATTERNS), re.IGNORECASE)
 
 def should_force_question(user_msg: str) -> bool:
@@ -173,61 +160,159 @@ def should_force_question(user_msg: str) -> bool:
 # Optional: switch to enable/disable coaching globally
 COACH_ENABLED = True
 
-def build_system_prompt(character_key: str, force_question: bool) -> str:
-    persona = CHARACTER_PERSONAS.get(character_key, CHARACTER_PERSONAS['default']) +  "\n\n" + DEFAULT_PROMPT + "\n\n" + COACHING_PROMPT
+# ------------------------------
+# 3) Move-specific guardrails to enforce the ladder in the LLM output
+#    (The policy decides the move; these constrain the phrasing.)
+# ------------------------------
+MOVE_GUIDELINES: Dict[Move, str] = {
+    Move.NUDGE: (
+        "MOVE=NUDGE. Give ONLY 1–2 sentences of encouragement or a recall cue. "
+        "Do NOT introduce new content or hints. Ask exactly one small follow-up question."
+    ),
+    Move.REFLECT: (
+        "MOVE=REFLECT. Ask the child to think aloud with ONE focused question. "
+        "Do NOT give hints or answers yet. Keep to 1–2 sentences, then ask one question."
+    ),
+    Move.ANALOGY: (
+        "MOVE=ANALOGY. Offer exactly ONE familiar analogy (kid-friendly) that maps to the concept. "
+        "Keep it short (<=2 sentences), then ask one question about how the analogy helps."
+    ),
+    Move.MINI_EXPLANATION: (
+        "MOVE=MINI_EXPLANATION. Provide a very brief clarification (<=2 sentences), "
+        "then hand control back with one question inviting them to try."
+    ),
+}
+
+# ------------------------------
+# 4) Message utilities
+# ------------------------------
+def build_system_prompt(character_key: str, force_question: bool, move: Move) -> str:
+    persona = CHARACTER_PERSONAS.get(character_key, CHARACTER_PERSONAS["default"])
+    base = persona + "\n\n" + DEFAULT_PROMPT + "\n\n" + COACHING_PROMPT
+
+    # Append ladder move constraints
+    base += "\n\n" + MOVE_GUIDELINES[move]
 
     if force_question:
-        persona += (
-            "\n\nStudent expressed uncertainty or said they have no questions. "
-            "Respond with a SHORT, supportive coaching prompt that ends with EXACTLY ONE clear question. "
-            "Choose ONE (no spoilers): "
-            "(b) ask for a 1–2 sentence summary of the current part, "
-            "(c) ask a prediction with reasoning, "
-            "(d) ask for a tricky word/line to unpack using text evidence, or "
-            "(e) ask how a character feels and what evidence shows it. "
-            "Limit to 1–2 sentences total and end with a question mark."
+        base += (
+            "\n\nThe child expressed uncertainty or having no questions. "
+            "Respond with a SHORT, supportive coaching nudge that ends with EXACTLY ONE clear question. "
+            "Choose ONE: ask for a 1–2 sentence summary, a prediction with a reason, a tricky word/line to unpack, "
+            "or how a character feels with text evidence. Keep to 1–2 sentences total."
         )
-    
-    return persona
-
+    return base
 
 def sanitize_history(items: List[Dict[str, str]]) -> List[Dict[str, str]]:
-    """Keep only well-formed {role, content} with allowed roles."""
+    """Keep only well-formed {role, content} pairs with allowed roles; cap length."""
     out = []
     for it in items or []:
         role = (it.get("role") or "").strip()
         content = (it.get("content") or "").strip()
         if role in ("user", "assistant") and content:
             out.append({"role": role, "content": content})
-    return out[-12:]
+    return out[-12:]  # keep last 12 turns
 
+# ------------------------------
+# 5) Per-session LadderPolicy
+#    (In production, use Redis or DB keyed by a stable session/user id.)
+# ------------------------------
+_POLICY_STORE: Dict[str, LadderPolicy] = {}
+
+def _session_key(request) -> str:
+    # Ensure a Django session exists
+    if not request.session.session_key:
+        request.session.save()
+    return f"ladder:{request.session.session_key}"
+
+def _get_policy(request) -> LadderPolicy:
+    key = _session_key(request)
+    if key not in _POLICY_STORE:
+        _POLICY_STORE[key] = LadderPolicy()
+    return _POLICY_STORE[key]
+
+# Optional: tiny emoji map for UI flavor (doesn't affect policy)
+
+
+# ------------------------------
+# 6) API View
+# ------------------------------
+@method_decorator(csrf_exempt, name="dispatch")
 class ChatAPIView(APIView):
+    """
+    POST JSON: {
+      "message": str,
+      "character": str (optional),
+      "history": [{"role": "user"|"assistant", "content": str}, ...] (optional)
+    }
+    Returns: {
+      "reply": str,
+      "move": "NUDGE"|"REFLECT"|"ANALOGY"|"MINI_EXPLANATION",
+      "log_ok": bool,
+      "violations": [...],
+      "moves": [{"role": "...", "move": "...", "text": "..."}]
+    }
+    """
+
     def post(self, request):
         try:
-            user_msg = (request.data.get('message') or "").strip()
-            character = request.data.get('character', 'default')
+            user_msg: str = (request.data.get("message") or "").strip()
+            character: str = (request.data.get("character") or "default").strip()
+            history: List[Dict[str, str]] = sanitize_history(request.data.get("history") or [])
+
+            if not user_msg:
+                # No input → gentle nudge
+                return Response(
+                    {
+                        "reply": "📚 Tell me what you’re thinking about the story, and we’ll figure it out together! What’s on your mind?",
+                        "move": "NUDGE",
+                        "log_ok": True,
+                        "violations": [],
+                        "moves": [{"role": "assistant", "move": "NUDGE", "text": "Prompted child to share."}],
+                    }
+                )
+
+            # --- Ladder policy decision
+            policy = _get_policy(request)
             force_q = should_force_question(user_msg)
-            history = sanitize_history(request.data.get("history") or [])
+            move: Move = policy.plan(user_msg)  # decides NUDGE/REFLECT/ANALOGY/MINI_EXPLANATION
 
+            # --- Build LLM system prompt with persona + coach + move guardrails
+            system_prompt = build_system_prompt(character_key=character, force_question=force_q, move=move)
 
-            system_prompt = build_system_prompt(character, force_question=force_q)
-
-
+            # You can pass history through if you want model continuity
             messages = [{"role": "system", "content": system_prompt}, *history, {"role": "user", "content": user_msg}]
 
+            # --- LLM phrasing under constraints
             completion = openai.chat.completions.create(
-                model="gpt-4",
+                model="gpt-4o-mini",  # fast + cheap; swap to your preferred model
                 messages=messages,
-                temperature=0.9,
-                max_tokens=180,   # small, child-length responses
+                temperature=0.7,
+                max_tokens=180,      # short, child-length responses
+            )
+            reply = completion.choices[0].message.content.strip()
+
+
+            # Log assistant turn into policy for validation/auditing
+            policy.log_assistant(move, reply, reason=f"policy-selected {move.name}")
+
+            # Validate ladder behavior
+            report = policy.validate()
+
+            return Response(
+                {
+                    "reply": reply,
+                    "move": move.name,
+                    "log_ok": report["ok"],
+                    "violations": report["violations"],
+                    "moves": report["moves"],
+                }
             )
 
-            reply = completion.choices[0].message.content
-            return Response({"reply": reply})
-
         except Exception as e:
-            print("OpenAI error:", e)
+            # Surface a safe message to the child; debug to server logs
+            print("ChatAPIView error:", e)
+            safe_char = character if character in CHARACTER_PERSONAS else "the character"
             return Response(
-                {"reply": f"Sorry, {character if character in CHARACTER_PERSONAS else 'the character'} is unavailable right now."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {"reply": f"Sorry, {safe_char} is unavailable right now. Want to try again in a moment?"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )

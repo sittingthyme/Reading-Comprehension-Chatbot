@@ -2,9 +2,11 @@
 import React, { useState } from 'react';
 import './App.css';
 import SelectionScreen from './selectionScreen.jsx';
-import { SPONGEBOB_IMG, PO_IMG, KRATOS_IMG, NARUTO_IMG, PETER_IMG,
-  ELSA_IMG, GERONIMO_IMG, HERMIONE_IMG, RAVEN_IMG, SAKURA_IMG, SONIC_IMG, 
-  MASTER_IMG, LUZ_IMG, NATHAN_IMG, ANNABETH_IMG} from './images';
+import {
+  SPONGEBOB_IMG, PO_IMG, KRATOS_IMG, NARUTO_IMG, PETER_IMG,
+  ELSA_IMG, GERONIMO_IMG, HERMIONE_IMG, RAVEN_IMG, SAKURA_IMG, SONIC_IMG,
+  MASTER_IMG, LUZ_IMG, NATHAN_IMG, ANNABETH_IMG
+} from './images';
 
 // Add a neutral "default" option used when mode === "default"
 const defaultCharacter = {
@@ -16,7 +18,6 @@ const defaultCharacter = {
 };
 
 const characters = {
-  // --- existing characters (unchanged) ---
   spongebob: {
     name: 'SpongeBob SquarePants',
     description: 'The optimistic and energetic sea sponge from Bikini Bottom',
@@ -109,6 +110,55 @@ const characters = {
   },
 };
 
+// ===== Name screen (updated layout & modern input) =====
+function NameInput({ onSubmit }) {
+  const [name, setName] = useState('');
+
+  const handleSubmit = () => {
+    if (name.trim()) onSubmit(name.trim());
+  };
+
+  return (
+    <div className="name-input-screen">
+      {/* corner decorations */}
+      <span className="corner tl" aria-hidden="true"></span>
+      <span className="corner tr" aria-hidden="true"></span>
+      <span className="corner bl" aria-hidden="true"></span>
+      <span className="corner br" aria-hidden="true"></span>
+
+      {/* top titles (use Portuguese to match screenshot) */}
+      <div className="name-input-header minimal">
+        <h1 className="hero-title">Reading Comprehension Chatbot</h1>
+        <p className="hero-sub">Welcome!</p>
+      </div>
+
+      {/* centered input + button */}
+      <div className="name-input-center">
+        <div className="name-card flat">
+          <input
+            id="username"
+            className="name-input name-input-underline"
+            type="text"
+            value={name}
+            autoFocus
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Enter your name..."
+            onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+          />
+          <button
+            className="outline-gradient-btn"
+            onClick={handleSubmit}
+            disabled={!name.trim()}
+          >
+            Continue
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// -------- Character grid --------
 function CharacterSelection({ onSelect }) {
   return (
     <div className="character-selection">
@@ -116,8 +166,8 @@ function CharacterSelection({ onSelect }) {
       <hr />
       <div className="character-grid">
         {Object.entries(characters).map(([key, character]) => (
-          <div 
-            key={key} 
+          <div
+            key={key}
             className="character-card"
             onClick={() => onSelect(key)}
           >
@@ -133,54 +183,53 @@ function CharacterSelection({ onSelect }) {
   );
 }
 
-function Chat({ selectedCharacter }) {
-  // If default mode, use defaultCharacter data
+// -------- Chat (unchanged logic; accepts username) --------
+function Chat({ selectedCharacter, username }) {
   const persona =
     selectedCharacter === 'default'
       ? defaultCharacter
       : characters[selectedCharacter];
 
-  const [messages, setMessages] = useState([
-    { from: 'bot', text: persona.initialMessage },
-  ]);
+  const initial = username
+    ? persona.initialMessage.replace('{username}', username)
+    : persona.initialMessage;
+
+  const [messages, setMessages] = useState([{ from: 'bot', text: initial }]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-
-  // inside Chat component in App.jsx
 
   const toLLMHistory = (msgs) =>
     (msgs || []).map(m => ({
       role: m.from === 'user' ? 'user' : 'assistant',
       content: m.text,
     }));
-  
+
   const sendMessage = async () => {
     if (!input.trim()) return;
-  
-    // 1) Build history from the *current* messages
+
     const historyPayload = toLLMHistory([...messages].slice(-8));
-  
+
     const userMsg = { from: 'user', text: input };
     setMessages((msgs) => [...msgs, userMsg]);
     setInput('');
     setIsLoading(true);
-  
+
     try {
       const payload = {
         message: userMsg.text,
-        character: selectedCharacter,   // "default" or persona key
-        history: historyPayload,        // <-- make sure this is here
+        character: selectedCharacter,
+        username,
+        history: historyPayload,
       };
-  
-      // 2) Debug log — verify in the console
+
       console.log('POST /api/chat payload ->', payload);
-  
+
       const res = await fetch('http://localhost:8000/api/chat/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-  
+
       if (!res.ok) throw new Error('Request failed');
       const { reply } = await res.json();
       setMessages((msgs) => [...msgs, { from: 'bot', text: reply }]);
@@ -198,7 +247,10 @@ function Chat({ selectedCharacter }) {
   return (
     <div className="chat-container">
       <div className="character-header">
-        <h2>Chatting with {persona.name}</h2>
+        <h2>
+          Chatting with {persona.name}
+          {username ? ` — ${username}` : ''}
+        </h2>
       </div>
       <div className="messages">
         {messages.map((m, i) => (
@@ -228,11 +280,10 @@ function Chat({ selectedCharacter }) {
   );
 }
 
+// -------- App --------
 export default function App() {
-  // "select" -> show SelectionScreen
-  // "default" -> jump straight into Chat with default persona
-  // "personalized" -> show CharacterSelection then Chat
-  const [mode, setMode] = useState('select');
+  const [username, setUsername] = useState(null);
+  const [mode, setMode] = useState('select'); // select | default | personalized
   const [selectedCharacter, setSelectedCharacter] = useState(null);
 
   const resetToModeSelect = () => {
@@ -242,24 +293,21 @@ export default function App() {
 
   return (
     <div className="app-container">
-      <h1 style={{ textAlign: 'center' }}>Reading Comprehension Chatbot</h1>
-
-      {mode === 'select' && (
+      {/* Keep global title off here since we show it in NameInput header for the first screen */}
+      {!username ? (
+        <NameInput onSubmit={setUsername} />
+      ) : mode === 'select' ? (
         <SelectionScreen onChoose={setMode} />
-      )}
-
-      {mode === 'default' && (
+      ) : mode === 'default' ? (
         <>
-          <Chat selectedCharacter="default" />
+          <Chat selectedCharacter="default" username={username} />
           <div className="toolbar">
             <button className="change-character" onClick={resetToModeSelect}>
               Back
             </button>
           </div>
         </>
-      )}
-
-      {mode === 'personalized' && (
+      ) : (
         <>
           {!selectedCharacter ? (
             <>
@@ -272,7 +320,7 @@ export default function App() {
             </>
           ) : (
             <>
-              <Chat selectedCharacter={selectedCharacter} />
+              <Chat selectedCharacter={selectedCharacter} username={username} />
               <div className="toolbar">
                 <button
                   className="change-character"
