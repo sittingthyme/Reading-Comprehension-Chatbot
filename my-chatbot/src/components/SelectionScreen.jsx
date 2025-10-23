@@ -1,4 +1,3 @@
-// selectionScreen.jsx
 import React from "react";
 
 export default function SelectionScreen({ onChoose }) {
@@ -12,8 +11,8 @@ export default function SelectionScreen({ onChoose }) {
 
       {/* header */}
       <header className="select-header">
-        <h1 className="hero-title">Welcome to your reading adventure</h1>
-        <p className="hero-sub">Choose a system</p>
+        <h1 className="hero-title">Bem-vindo ao tua aventura literária</h1>
+        <p className="hero-sub">Escolhe o sistema</p>
       </header>
 
       {/* big pill buttons */}
@@ -24,7 +23,7 @@ export default function SelectionScreen({ onChoose }) {
           aria-label="Choose Personalized AI System"
         >
           <ChatIcon className="pill-icon" />
-          <span>Personalized AI System</span>
+          <span>Sistema AI Personalizado</span>
         </button>
 
         <button
@@ -33,7 +32,7 @@ export default function SelectionScreen({ onChoose }) {
           aria-label="Choose Generic AI System"
         >
           <ChatIcon className="pill-icon" variant="secondary" />
-          <span>Generic AI System</span>
+          <span>Sistema AI Genérico</span>
         </button>
       </div>
     </div>
