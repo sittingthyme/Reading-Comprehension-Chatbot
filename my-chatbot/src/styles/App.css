@@ -69,6 +69,7 @@
     text-align: center;
     font-size: clamp(20px, 3vw, 36px);
     outline: none;
+    color: #111;
   }
   .name-input-underline::placeholder { color: #9ca3af; }
   .name-input-underline:focus { border-bottom-color: #111827; }
@@ -275,7 +276,7 @@
   }
   .chat-input {
     border: none; outline: none; font-size: clamp(14px, 1.8vw, 18px);
-    padding: 10px 0; background: transparent;
+    padding: 10px 0; background: transparent; color: #111;
   }
   .send-btn {
     width: 42px; height: 42px; border-radius: 999px; border: none;
