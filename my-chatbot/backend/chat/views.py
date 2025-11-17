@@ -13,7 +13,11 @@ import os
 import re
 from typing import Dict, List, Optional
 from openai import OpenAI
-from .scaffold_policy import LadderPolicy, Move, render_move  # <-- new
+from .scaffold_policy import LadderPolicy, Move, render_move 
+from django.http import JsonResponse
+import json
+from .models import Conversation # <-- new
+from django.utils import timezone
 
 # ------------------------------
 # OpenAI client
@@ -227,7 +231,76 @@ def _get_policy(request) -> LadderPolicy:
         _POLICY_STORE[key] = LadderPolicy()
     return _POLICY_STORE[key]
 
-# Optional: tiny emoji map for UI flavor (doesn't affect policy)
+@csrf_exempt
+def start_conversation(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    user_name = body.get("userName") or "Anon"
+    character = body.get("character") or "default"
+    initial_message = body.get("initialMessage")
+
+    messages = []
+    if initial_message:
+        messages.append(
+            {
+                "sender": "bot",
+                "content": initial_message,
+                "created_at": timezone.now().isoformat(),
+            }
+        )
+
+    convo = Conversation.objects.create(
+        user_name=user_name,
+        character=character,
+        messages=messages,
+    )
+
+    return JsonResponse({"conversationId": str(convo.id)})
+
+
+@csrf_exempt
+def save_message(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    conversation_id = body.get("conversationId")
+    sender = body.get("sender")
+    content = body.get("content")
+
+    if not conversation_id or not sender or not content:
+        return JsonResponse(
+            {"error": "conversationId, sender, and content are required"},
+            status=400,
+        )
+
+    try:
+        convo = Conversation.objects.get(id=conversation_id)
+    except Conversation.DoesNotExist:
+        return JsonResponse({"error": "Conversation not found"}, status=404)
+
+    msgs = convo.messages or []
+    msgs.append(
+        {
+            "sender": sender,
+            "content": content,
+            "created_at": timezone.now().isoformat(),
+        }
+    )
+    convo.messages = msgs
+    convo.save(update_fields=["messages"])
+
+    return JsonResponse({"ok": True})
 
 
 # ------------------------------
@@ -313,3 +386,5 @@ class ChatAPIView(APIView):
                 {"reply": f"Sorry, {safe_char} is unavailable right now. Want to try again in a moment?"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+        
+   

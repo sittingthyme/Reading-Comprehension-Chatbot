@@ -1,9 +1,17 @@
-import React, { useState, useRef, useLayoutEffect, useCallback } from "react";
+import React, {
+  useState,
+  useRef,
+  useLayoutEffect,
+  useCallback,
+  useEffect,
+} from "react";
 import { defaultCharacter, characters } from "../data/characters";
 
 export default function Chat({ selectedCharacter, username }) {
   const persona =
-    selectedCharacter === "default" ? defaultCharacter : characters[selectedCharacter];
+    selectedCharacter === "default"
+      ? defaultCharacter
+      : characters[selectedCharacter];
 
   const initial = username
     ? persona.initialMessage.replace("{username}", username)
@@ -12,6 +20,9 @@ export default function Chat({ selectedCharacter, username }) {
   const [messages, setMessages] = useState([{ from: "bot", text: initial }]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // conversation id returned by backend
+  const [conversationId, setConversationId] = useState(null);
 
   const listRef = useRef(null);
   const endRef = useRef(null);
@@ -36,14 +47,90 @@ export default function Chat({ selectedCharacter, username }) {
       content: m.text,
     }));
 
+  // save a single message (user or bot) to backend
+  const saveMessageToBackend = useCallback(
+    async (sender, content) => {
+      // if we don't have a real conversation id, skip saving
+      if (!conversationId || conversationId === "local-only") return;
+  
+      try {
+        await fetch("http://localhost:8000/api/save-message/", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            conversationId,
+            sender,
+            content,
+          }),
+        });
+      } catch (err) {
+        console.error("Failed to save message:", err);
+      }
+    },
+    [conversationId]
+  );
+  
+  // start conversation when chat mounts
+  useEffect(() => {
+    let cancelled = false;
+  
+    async function startConversation() {
+      try {
+        const res = await fetch("http://localhost:8000/api/start-conversation/", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userName: username || "Anon",
+            character: selectedCharacter || "default",
+            initialMessage: initial,
+          }),
+        });
+  
+        if (!res.ok) {
+          console.error("Failed to start conversation, status:", res.status);
+          if (!cancelled) {
+            // allow typing but don't try DB logging
+            setConversationId("local-only");
+          }
+          return;
+        }
+  
+        const data = await res.json();
+        console.log("start-conversation data:", data);
+  
+        if (!cancelled) {
+          setConversationId(data.conversationId);
+          if (initial) {
+            saveMessageToBackend("bot", initial);
+          }
+        }
+      } catch (err) {
+        console.error("Error starting conversation:", err);
+        if (!cancelled) {
+          setConversationId("local-only");
+        }
+      }
+    }
+  
+    startConversation();
+  
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCharacter, username]);
+
   const sendMessage = async () => {
     const value = input.trim();
-    if (!value) return;
+    if (!value || isLoading || !conversationId) return;
 
     const userMsg = { from: "user", text: value };
     setMessages((msgs) => [...msgs, userMsg]);
     setInput("");
     setIsLoading(true);
+
+    // save user message (no need to await)
+    saveMessageToBackend("user", userMsg.text);
 
     try {
       const payload = {
@@ -62,12 +149,19 @@ export default function Chat({ selectedCharacter, username }) {
       if (!res.ok) throw new Error("Request failed");
 
       const { reply } = await res.json();
-      setMessages((msgs) => [...msgs, { from: "bot", text: reply }]);
+      const botMsg = { from: "bot", text: reply };
+
+      setMessages((msgs) => [...msgs, botMsg]);
+
+      // save bot message
+      saveMessageToBackend("bot", botMsg.text);
     } catch (_e) {
-      setMessages((msgs) => [
-        ...msgs,
-        { from: "bot", text: "Desculpa, ocorreu um erro. Tenta novamente." },
-      ]);
+      const errMsg = {
+        from: "bot",
+        text: "Desculpa, ocorreu um erro. Tenta novamente.",
+      };
+      setMessages((msgs) => [...msgs, errMsg]);
+      saveMessageToBackend("bot", errMsg.text);
     } finally {
       setIsLoading(false);
     }
@@ -75,6 +169,8 @@ export default function Chat({ selectedCharacter, username }) {
 
   const prettyName =
     selectedCharacter?.charAt(0).toUpperCase() + selectedCharacter?.slice(1);
+
+  const inputDisabled = isLoading || !conversationId;
 
   return (
     <div className="chat-screen">
@@ -88,7 +184,8 @@ export default function Chat({ selectedCharacter, username }) {
       <header className="chat-hero">
         <h1 className="hero-title xl">Vamos explorar um mundo de histórias!</h1>
         <p className="hero-sub">
-          A conversar com {selectedCharacter === "default" ? "Reading Coach" : prettyName}
+          A conversar com{" "}
+          {selectedCharacter === "default" ? "Reading Coach" : prettyName}
         </p>
       </header>
 
@@ -101,13 +198,19 @@ export default function Chat({ selectedCharacter, username }) {
               <div key={i} className={`msg-row ${isBot ? "left" : "right"}`}>
                 <div className={`name-label ${isBot ? "left" : "right"}`}>
                   {isBot ? persona.name : username || "Tu"}
-                  {!isBot && <span className="name-emoji" aria-hidden></span>}
+                  {!isBot && (
+                    <span className="name-emoji" aria-hidden></span>
+                  )}
                 </div>
 
                 {isBot ? (
                   <div className="avatar-circle bot-avatar" aria-hidden>
                     {persona.image && (
-                      <img src={persona.image} alt={persona.name} className="avatar-img" />
+                      <img
+                        src={persona.image}
+                        alt={persona.name}
+                        className="avatar-img"
+                      />
                     )}
                   </div>
                 ) : (
@@ -118,7 +221,9 @@ export default function Chat({ selectedCharacter, username }) {
                   </div>
                 )}
 
-                <div className={`bubble ${isBot ? "bot" : "user"}`}>{m.text}</div>
+                <div className={`bubble ${isBot ? "bot" : "user"}`}>
+                  {m.text}
+                </div>
               </div>
             );
           })}
@@ -128,7 +233,11 @@ export default function Chat({ selectedCharacter, username }) {
               <div className="name-label left">{persona.name}</div>
               <div className="avatar-circle bot-avatar" aria-hidden>
                 {persona.image && (
-                  <img src={persona.image} alt={persona.name} className="avatar-img" />
+                  <img
+                    src={persona.image}
+                    alt={persona.name}
+                    className="avatar-img"
+                  />
                 )}
               </div>
               <div className="bubble bot">
@@ -148,14 +257,18 @@ export default function Chat({ selectedCharacter, username }) {
           className="chat-input"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !isLoading && sendMessage()}
-          placeholder="Escreve aqui..."
-          disabled={isLoading}
+          onKeyDown={(e) =>
+            e.key === "Enter" && !inputDisabled && sendMessage()
+          }
+          placeholder={
+            !conversationId ? "A preparar a conversa..." : "Escreve aqui..."
+          }
+          disabled={inputDisabled}
         />
         <button
           className="send-btn"
           onClick={sendMessage}
-          disabled={isLoading}
+          disabled={inputDisabled}
           aria-label="Enviar"
           title="Enviar"
         >
