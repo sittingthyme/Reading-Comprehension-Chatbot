@@ -47,28 +47,80 @@ export default function Chat({ selectedCharacter, username }) {
       content: m.text,
     }));
 
-  // save a single message (user or bot) to backend
-  const saveMessageToBackend = useCallback(
-    async (sender, content) => {
-      // if we don't have a real conversation id, skip saving
-      if (!conversationId || conversationId === "local-only") return;
+    const saveMessageToBackend = useCallback(
+      async (sender, content) => {
+        if (!conversationId || conversationId === "local-only") return;
+    
+        const text = content || "";
+        const lower = text.toLowerCase();
+    
+        let meta = {};
+    
+        if (sender === "user") {
+          const isQuestion = text.includes("?");
+          const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+          const elaborated = wordCount >= 12; 
+    
+          const confusion_signal = /i don't know|idk|confused|stuck|lost|i'm not sure/.test(
+            lower
+          )
+            ? "HIGH"
+            : "NONE";
+    
+          const autonomy_signal = /let me try|i want to try|can i do it|i'll do it myself/.test(
+            lower
+          )
+            ? "HIGH"
+            : "NONE";
+    
+          meta = {
+            role: "child",
+            on_task: true, 
+            elaborated,
+            is_question: isQuestion,
+            confusion_signal,
+            autonomy_signal,
+          };
+        } else {
+      
+          const hasWarmEmoji = /❄️|✨|🌟|💖|💕|📚|😊|😀|🙂|🌈/.test(text);
+          const hasChatter = /lol|haha|lmao|😂/.test(lower);
+    
+          let affect = "NEUTRAL";
+          if (hasChatter) {
+            affect = "OVER_SOCIAL";
+          } else if (hasWarmEmoji) {
+            affect = "WARM_SUPPORTIVE";
+          }
+    
+          meta = {
+            role: "agent",
+            text_focus: "ON_TEXT",      
+            stance: "RESPONSIVE",       
+            ladder_step: "NUDGE",       
+            affect,
+          };
+        }
+    
+        try {
+          await fetch("http://localhost:8000/api/save-message/", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              conversationId,
+              sender,
+              content,
+              meta,
+            }),
+          });
+        } catch (err) {
+          console.error("Failed to save message:", err);
+        }
+      },
+      [conversationId]
+    );
+    
   
-      try {
-        await fetch("http://localhost:8000/api/save-message/", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            conversationId,
-            sender,
-            content,
-          }),
-        });
-      } catch (err) {
-        console.error("Failed to save message:", err);
-      }
-    },
-    [conversationId]
-  );
   
   // start conversation when chat mounts
   useEffect(() => {

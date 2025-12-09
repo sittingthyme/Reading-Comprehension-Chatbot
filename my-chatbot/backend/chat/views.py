@@ -1,23 +1,25 @@
-# views.py
 from __future__ import annotations
 
-from django.shortcuts import render  # optional; keep if you use render elsewhere
+from django.shortcuts import render  # if you use it elsewhere
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
+from django.utils import timezone
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.decorators import api_view
 
+import json
 import os
 import re
 from typing import Dict, List, Optional
+
 from openai import OpenAI
-from .scaffold_policy import LadderPolicy, Move, render_move 
-from django.http import JsonResponse
-import json
-from .models import Conversation # <-- new
-from django.utils import timezone
+from .scaffold_policy import LadderPolicy, Move, render_move
+from .models import Conversation
+from .audit import compute_audit
 
 # ------------------------------
 # OpenAI client
@@ -121,7 +123,7 @@ CHARACTER_PERSONAS: Dict[str, str] = {
 # 2) Shared AI-Coach (PEER + CROWD) — appended to EVERY persona
 COACHING_PROMPT = """
 🎓 FRAMEWORK & TONE
-- Audience: children ages 10–12; warm, curious, supportive, easy to understand.
+- Audience: children ages 10–12; warm, curious, supportive, easy to understand. Do not get distracted. Only talk about the book even if the children start to get distracted.
 - Length: 3–5 short sentences total. Avoid spoilers.
 - End with exactly ONE question inviting the child’s next step.
 
@@ -161,10 +163,6 @@ def should_force_question(user_msg: str) -> bool:
 # Optional: switch to enable/disable coaching globally
 COACH_ENABLED = True
 
-# ------------------------------
-# 3) Move-specific guardrails to enforce the ladder in the LLM output
-#    (The policy decides the move; these constrain the phrasing.)
-# ------------------------------
 MOVE_GUIDELINES: Dict[Move, str] = {
     Move.NUDGE: (
         "MOVE=NUDGE. Give ONLY 1–2 sentences of encouragement or a recall cue. "
@@ -184,14 +182,10 @@ MOVE_GUIDELINES: Dict[Move, str] = {
     ),
 }
 
-# ------------------------------
-# 4) Message utilities
-# ------------------------------
 def build_system_prompt(character_key: str, force_question: bool, move: Move) -> str:
     persona = CHARACTER_PERSONAS.get(character_key, CHARACTER_PERSONAS["default"])
     base = persona + "\n\n" + DEFAULT_PROMPT + "\n\n" + COACHING_PROMPT
 
-    # Append ladder move constraints
     base += "\n\n" + MOVE_GUIDELINES[move]
 
     if force_question:
@@ -213,10 +207,7 @@ def sanitize_history(items: List[Dict[str, str]]) -> List[Dict[str, str]]:
             out.append({"role": role, "content": content})
     return out[-12:]  # keep last 12 turns
 
-# ------------------------------
-# 5) Per-session LadderPolicy
-#    (In production, use Redis or DB keyed by a stable session/user id.)
-# ------------------------------
+
 _POLICY_STORE: Dict[str, LadderPolicy] = {}
 
 def _session_key(request) -> str:
@@ -233,6 +224,15 @@ def _get_policy(request) -> LadderPolicy:
 
 @csrf_exempt
 def start_conversation(request):
+    """
+    Creates a new Conversation row with an optional initial bot message.
+    Expects JSON body:
+      {
+        "userName": "Alice",
+        "character": "Naruto",
+        "initialMessage": "Hi, I'm Naruto..."
+      }
+    """
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
 
@@ -241,17 +241,21 @@ def start_conversation(request):
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
 
-    user_name = body.get("userName") or "Anon"
-    character = body.get("character") or "default"
+    user_name = body.get("userName") or "Unknown"
+    character = body.get("character") or "Default"
     initial_message = body.get("initialMessage")
 
     messages = []
     if initial_message:
         messages.append(
             {
-                "sender": "bot",
+                "sender": "assistant",
                 "content": initial_message,
                 "created_at": timezone.now().isoformat(),
+                "meta": {
+                    "role": "agent",
+                    "on_text": True,
+                },
             }
         )
 
@@ -260,12 +264,22 @@ def start_conversation(request):
         character=character,
         messages=messages,
     )
-
     return JsonResponse({"conversationId": str(convo.id)})
 
 
 @csrf_exempt
 def save_message(request):
+    """
+    Append a message to an existing Conversation.
+
+    Expects JSON body:
+      {
+        "conversationId": "...",
+        "sender": "user" | "assistant" | ...,
+        "content": "text",
+        "meta": { ... optional annotations for auditing ... }
+      }
+    """
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
 
@@ -277,8 +291,9 @@ def save_message(request):
     conversation_id = body.get("conversationId")
     sender = body.get("sender")
     content = body.get("content")
+    meta = body.get("meta") or {}
 
-    if not conversation_id or not sender or not content:
+    if not conversation_id or not sender or content is None:
         return JsonResponse(
             {"error": "conversationId, sender, and content are required"},
             status=400,
@@ -295,17 +310,17 @@ def save_message(request):
             "sender": sender,
             "content": content,
             "created_at": timezone.now().isoformat(),
+            "meta": meta,
         }
     )
     convo.messages = msgs
     convo.save(update_fields=["messages"])
 
+    convo.recompute_audit(save=True)
+
     return JsonResponse({"ok": True})
 
 
-# ------------------------------
-# 6) API View
-# ------------------------------
 @method_decorator(csrf_exempt, name="dispatch")
 class ChatAPIView(APIView):
     """
@@ -387,4 +402,16 @@ class ChatAPIView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
         
-   
+@api_view(["GET"])
+def conversation_audit(request, conversation_id):
+    """
+    Return auditing scores for a given conversation.
+    """
+    try:
+        convo = Conversation.objects.get(id=conversation_id)
+    except Conversation.DoesNotExist:
+        return Response({"error": "Conversation not found"}, status=404)
+
+    # Either use cached scores or recompute on the fly
+    scores = convo.recompute_audit(save=True)
+    return Response(scores, status=200)
