@@ -15,7 +15,7 @@ import SAKURA_IMG from "./characters/sakura.png";
 import SONIC_IMG from "./characters/sonic.png";
 import MASTER_IMG from "./characters/master-chief.png";
 import LUZ_IMG from "./characters/luz.png";
-import NATHAN_IMG from "./characters/nathan-drake.png";
+import GREG_IMG from "./characters/nathan-drake.png";
 import ANNABETH_IMG from "./characters/annabeth.png";
 
 export {
@@ -32,6 +32,6 @@ export {
   SONIC_IMG,
   MASTER_IMG,
   LUZ_IMG,
-  NATHAN_IMG,
+  GREG_IMG,
   ANNABETH_IMG,
 };

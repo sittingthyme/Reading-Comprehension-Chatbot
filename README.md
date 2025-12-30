@@ -11,3 +11,6 @@
 9. Run this command: source venv/bin/activate
 10. Run this command: python manage.py runserver
 11. Go to the local that they give you after running npm run dev.
+
+To view db:
+http://127.0.0.1:8000/admin/login/?next=/admin/

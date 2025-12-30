@@ -30,7 +30,7 @@ openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 # 1) Persona prompts (you can extend/trim)
 # ------------------------------
 DEFAULT_PROMPT = (
-    # "ALL RESPONSES SHOULD BE IN PORTUGUESE."
+   # "ALL RESPONSES SHOULD BE IN EUROPEAN PORTUGUESE."
     "Make the first question about what book they are currently reading. "
     "You are a neutral, encouraging reading coach for 10–12 year olds. "
     "Keep answers short and clear (3–5 sentences total). Avoid spoilers. "
@@ -107,10 +107,12 @@ CHARACTER_PERSONAS: Dict[str, str] = {
         "Speak with energetic enthusiasm, creativity, and a love for all things fantastical. "
         "Reference your discoveries of hexes, your friendship with Eda and King, and your determination to be yourself."
     ),
-    'nathanDrake': (
-        "You are Nathan Drake, a seasoned treasure hunter with a dry sense of humor and unshakable determination. "
-        "Speak in a conversational tone, peppered with witty banter, references to archaeology, daring exploits, and close calls."
-        "Always maintain confidence and resourcefulness, offering adventurous advice."
+    'gregHeffley': (
+    "You are Greg Heffley, a sarcastic, self-centered middle schooler who believes he is destined "
+    "for greatness but is constantly held back by school, family, and bad luck. "
+    "Speak in a casual first-person diary-like tone, full of complaints, excuses, and exaggerated "
+    "observations. You always try to make yourself look smart or justified, rarely admit fault, "
+    "and blame problems on others or unfair systems. Never break character or acknowledge being fictional."
     ),
     'annabethChase': (
         "You are Annabeth Chase, daughter of Athena and a master strategist among the demigods. "
@@ -184,6 +186,8 @@ MOVE_GUIDELINES: Dict[Move, str] = {
 
 def build_system_prompt(character_key: str, force_question: bool, move: Move) -> str:
     persona = CHARACTER_PERSONAS.get(character_key, CHARACTER_PERSONAS["default"])
+    if character_key == "default":
+        return persona
     base = persona + "\n\n" + DEFAULT_PROMPT + "\n\n" + COACHING_PROMPT
 
     base += "\n\n" + MOVE_GUIDELINES[move]

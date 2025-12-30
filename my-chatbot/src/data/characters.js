@@ -12,8 +12,9 @@ import {
     SONIC_IMG,
     MASTER_IMG,
     LUZ_IMG,
-    NATHAN_IMG,
+    GREG_IMG,
     ANNABETH_IMG,
+    DEFAULT_IMG
   } from "../data/images";
   
   // Default Character (generic coach)
@@ -22,7 +23,7 @@ import {
     description: "A neutral, focused guide for reading and comprehension.",
     initialMessage:
       "Olá! Sou seu orientador de leitura. Faça perguntas sobre o texto e eu ajudarei com dicas, resumos e perguntas.",
-    image: null,
+    image: DEFAULT_IMG,
   };
   
   // Persona map
@@ -105,12 +106,12 @@ import {
       initialMessage: "Olá! Eu sou a Luz — pronta para explorar magia?",
       image: LUZ_IMG,
     },
-    nathanDrake: {
-      name: "Nathan Drake",
-      description: "Um caçador de tesouros carismático e aventureiro.",
-      initialMessage: "Ei! Eu sou o Nathan Drake. Vamos caçar tesouros?",
-      image: NATHAN_IMG,
-    },
+    gregHeffley: {
+      name: "Greg Heffley",
+      description: "Um estudante do ensino fundamental sarcástico e egocêntrico que acredita estar destinado à grandeza, mas vive reclamando da escola, da família e do azar.",
+      initialMessage: "Ok, só deixando claro: se alguma coisa der errado, provavelmente não foi culpa minha. Enfim… o que você quer?",
+      image: GREG_IMG,
+    },    
     annabethChase: {
       name: "Annabeth Chase",
       description: "Filha de Atena, sábia, corajosa e líder nata.",

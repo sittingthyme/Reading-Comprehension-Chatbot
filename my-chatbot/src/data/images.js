@@ -11,5 +11,6 @@ export const SAKURA_IMG = import.meta.env.VITE_SAKURA
 export const SONIC_IMG = import.meta.env.VITE_SONIC
 export const MASTER_IMG = import.meta.env.VITE_MASTER
 export const LUZ_IMG = import.meta.env.VITE_LUZ
-export const NATHAN_IMG = import.meta.env.VITE_NATHAN
+export const GREG_IMG = import.meta.env.VITE_GREG
 export const ANNABETH_IMG = import.meta.env.VITE_ANNABETH
+export const DEFAULT_IMG = import.meta.env.VITE_DEFAULT
