@@ -1,11 +1,19 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 
 export default function NameInput({ onSubmit }) {
   const [name, setName] = useState("");
 
+  useEffect(() => {
+    const saved = localStorage.getItem("userName");
+    if (saved && saved.trim()) setName(saved);
+  }, []);
+
   const handleSubmit = () => {
     const trimmed = name.trim();
-    if (trimmed) onSubmit(trimmed);
+    if (!trimmed) return;
+
+    localStorage.setItem("userName", trimmed);
+    onSubmit(trimmed);
   };
 
   return (

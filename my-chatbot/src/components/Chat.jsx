@@ -185,11 +185,12 @@ export default function Chat({ selectedCharacter, username }) {
     saveMessageToBackend("user", userMsg.text);
 
     try {
+      const nextMessages = [...messages, userMsg];
       const payload = {
         message: userMsg.text,
         character: selectedCharacter,
-        username,
-        history: toLLMHistory(messages.slice(-8)),
+        userName: username,
+        history: toLLMHistory(nextMessages.slice(-8)),
       };
 
       const res = await fetch("http://localhost:8000/api/chat/", {
