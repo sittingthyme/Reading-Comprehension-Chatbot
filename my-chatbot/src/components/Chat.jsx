@@ -7,6 +7,15 @@ import React, {
 } from "react";
 import { defaultCharacter, characters } from "../data/characters";
 
+// Get API URL from environment variable, fallback to localhost for development
+const API_URL = import.meta.env.VITE_API_URL;
+
+// Debug: Log the API URL (remove in production if desired)
+if (import.meta.env.DEV) {
+  console.log('API URL:', API_URL);
+  console.log('VITE_API_URL env var:', import.meta.env.VITE_API_URL);
+}
+
 export default function Chat({ selectedCharacter, username }) {
   const persona =
     selectedCharacter === "default"
@@ -103,7 +112,7 @@ export default function Chat({ selectedCharacter, username }) {
         }
     
         try {
-          await fetch("http://localhost:8000/api/save-message/", {
+          await fetch(`${API_URL}/api/save-message/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -128,7 +137,7 @@ export default function Chat({ selectedCharacter, username }) {
   
     async function startConversation() {
       try {
-        const res = await fetch("http://localhost:8000/api/start-conversation/", {
+        const res = await fetch(`${API_URL}/api/start-conversation/`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -193,7 +202,7 @@ export default function Chat({ selectedCharacter, username }) {
         history: toLLMHistory(nextMessages.slice(-8)),
       };
 
-      const res = await fetch("http://localhost:8000/api/chat/", {
+      const res = await fetch(`${API_URL}/api/chat/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
