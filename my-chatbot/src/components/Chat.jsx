@@ -8,7 +8,7 @@ import React, {
 import { defaultCharacter, characters } from "../data/characters";
 
 // Get API URL from environment variable, fallback to localhost for development
-const API_URL = import.meta.env.VITE_API_URL;
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 // Debug: Log the API URL (remove in production if desired)
 if (import.meta.env.DEV) {
