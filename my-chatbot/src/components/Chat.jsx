@@ -7,36 +7,54 @@ import React, {
 } from "react";
 import { defaultCharacter, characters } from "../data/characters";
 
-// Get API URL from environment variable, fallback to localhost for development
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
-// Debug: Log the API URL (remove in production if desired)
 if (import.meta.env.DEV) {
-  console.log('API URL:', API_URL);
-  console.log('VITE_API_URL env var:', import.meta.env.VITE_API_URL);
+  console.log("API URL:", API_URL);
 }
 
-export default function Chat({ selectedCharacter, username }) {
+function mapApiMessagesToState(rows) {
+  return (rows || []).map((m) => ({
+    from: m.sender === "user" ? "user" : "bot",
+    text: m.content ?? "",
+  }));
+}
+
+export default function Chat({
+  selectedCharacter,
+  username,
+  studyContext = null,
+  onStudyLocked,
+  onRequestEndSession: _onRequestEndSession,
+}) {
   const persona =
     selectedCharacter === "default"
       ? defaultCharacter
-      : characters[selectedCharacter];
+      : characters[selectedCharacter] || defaultCharacter;
 
   const initial = username
     ? persona.initialMessage.replace("{username}", username)
     : persona.initialMessage;
 
-  const [messages, setMessages] = useState([{ from: "bot", text: initial }]);
+  const [messages, setMessages] = useState(() => {
+    if (studyContext?.initialMessages?.length) {
+      return mapApiMessagesToState(studyContext.initialMessages);
+    }
+    return [{ from: "bot", text: initial }];
+  });
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  // conversation id returned by backend
-  const [conversationId, setConversationId] = useState(null);
+  const [conversationId, setConversationId] = useState(
+    studyContext?.conversationId || null
+  );
+
+  const [secondsUntilLock, setSecondsUntilLock] = useState(null);
 
   const listRef = useRef(null);
   const endRef = useRef(null);
+  const lockEmittedRef = useRef(false);
 
-  // strong scroll-to-bottom
   const scrollToBottom = useCallback(() => {
     endRef.current?.scrollIntoView({ block: "end" });
     const el = listRef.current;
@@ -56,86 +74,107 @@ export default function Chat({ selectedCharacter, username }) {
       content: m.text,
     }));
 
-    const saveMessageToBackend = useCallback(
-      async (sender, content) => {
-        if (!conversationId || conversationId === "local-only") return;
-    
-        const text = content || "";
-        const lower = text.toLowerCase();
-    
-        let meta = {};
-    
-        if (sender === "user") {
-          const isQuestion = text.includes("?");
-          const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
-          const elaborated = wordCount >= 12; 
-    
-          const confusion_signal = /i don't know|idk|confused|stuck|lost|i'm not sure/.test(
-            lower
-          )
-            ? "HIGH"
-            : "NONE";
-    
-          const autonomy_signal = /let me try|i want to try|can i do it|i'll do it myself/.test(
-            lower
-          )
-            ? "HIGH"
-            : "NONE";
-    
-          meta = {
-            role: "child",
-            on_task: true, 
-            elaborated,
-            is_question: isQuestion,
-            confusion_signal,
-            autonomy_signal,
-          };
-        } else {
-      
-          const hasWarmEmoji = /❄️|✨|🌟|💖|💕|📚|😊|😀|🙂|🌈/.test(text);
-          const hasChatter = /lol|haha|lmao|😂/.test(lower);
-    
-          let affect = "NEUTRAL";
-          if (hasChatter) {
-            affect = "OVER_SOCIAL";
-          } else if (hasWarmEmoji) {
-            affect = "WARM_SUPPORTIVE";
+  const saveMessageToBackend = useCallback(
+    async (sender, content) => {
+      if (!conversationId || conversationId === "local-only") return;
+
+      const text = content || "";
+      const lower = text.toLowerCase();
+
+      let meta = {};
+
+      if (sender === "user") {
+        const isQuestion = text.includes("?");
+        const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+        const elaborated = wordCount >= 12;
+
+        const confusion_signal = /i don't know|idk|confused|stuck|lost|i'm not sure/.test(
+          lower
+        )
+          ? "HIGH"
+          : "NONE";
+
+        const autonomy_signal = /let me try|i want to try|can i do it|i'll do it myself/.test(
+          lower
+        )
+          ? "HIGH"
+          : "NONE";
+
+        meta = {
+          role: "child",
+          on_task: true,
+          elaborated,
+          is_question: isQuestion,
+          confusion_signal,
+          autonomy_signal,
+        };
+      } else {
+        const hasWarmEmoji = /❄️|✨|🌟|💖|💕|📚|😊|😀|🙂|🌈/.test(text);
+        const hasChatter = /lol|haha|lmao|😂/.test(lower);
+
+        let affect = "NEUTRAL";
+        if (hasChatter) {
+          affect = "OVER_SOCIAL";
+        } else if (hasWarmEmoji) {
+          affect = "WARM_SUPPORTIVE";
+        }
+
+        meta = {
+          role: "agent",
+          text_focus: "ON_TEXT",
+          stance: "RESPONSIVE",
+          ladder_step: "NUDGE",
+          affect,
+        };
+      }
+
+      const headers = { "Content-Type": "application/json" };
+      if (studyContext?.authToken) {
+        headers.Authorization = `Bearer ${studyContext.authToken}`;
+      }
+
+      try {
+        const res = await fetch(`${API_URL}/api/save-message/`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            conversationId,
+            sender,
+            content,
+            meta,
+          }),
+        });
+        if (res.status === 403) {
+          const d = await res.json().catch(() => ({}));
+          if (d.sessionLocked && !lockEmittedRef.current) {
+            lockEmittedRef.current = true;
+            onStudyLocked?.(d.lockReason || "time_cap");
           }
-    
-          meta = {
-            role: "agent",
-            text_focus: "ON_TEXT",      
-            stance: "RESPONSIVE",       
-            ladder_step: "NUDGE",       
-            affect,
-          };
         }
-    
-        try {
-          await fetch(`${API_URL}/api/save-message/`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              conversationId,
-              sender,
-              content,
-              meta,
-            }),
-          });
-        } catch (err) {
-          console.error("Failed to save message:", err);
-        }
-      },
-      [conversationId]
-    );
-    
-  
-  
-  // start conversation when chat mounts
+      } catch (err) {
+        console.error("Failed to save message:", err);
+      }
+    },
+    [conversationId, studyContext?.authToken, onStudyLocked]
+  );
+
+  useEffect(() => {
+    if (studyContext?.conversationId) {
+      setConversationId(studyContext.conversationId);
+      if (studyContext.initialMessages?.length) {
+        setMessages(mapApiMessagesToState(studyContext.initialMessages));
+      }
+    }
+  }, [studyContext?.conversationId, studyContext?.initialMessages]);
+
   useEffect(() => {
     let cancelled = false;
-  
+
     async function startConversation() {
+      if (studyContext?.conversationId) {
+        return;
+      }
+
       try {
         const res = await fetch(`${API_URL}/api/start-conversation/`, {
           method: "POST",
@@ -146,19 +185,16 @@ export default function Chat({ selectedCharacter, username }) {
             initialMessage: initial,
           }),
         });
-  
+
         if (!res.ok) {
           console.error("Failed to start conversation, status:", res.status);
           if (!cancelled) {
-            // allow typing but don't try DB logging
             setConversationId("local-only");
           }
           return;
         }
-  
+
         const data = await res.json();
-        console.log("start-conversation data:", data);
-  
         if (!cancelled) {
           setConversationId(data.conversationId);
           if (initial) {
@@ -172,25 +208,100 @@ export default function Chat({ selectedCharacter, username }) {
         }
       }
     }
-  
+
     startConversation();
-  
+
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCharacter, username]);
+  }, [selectedCharacter, username, studyContext?.conversationId]);
+
+  useEffect(() => {
+    lockEmittedRef.current = false;
+  }, [studyContext?.studySessionId]);
+
+  useEffect(() => {
+    if (!studyContext?.sessionStartedAtISO || !studyContext?.maxSessionMinutes) {
+      setSecondsUntilLock(null);
+      return;
+    }
+    const capSec = studyContext.maxSessionMinutes * 60;
+    const tick = () => {
+      const start = new Date(studyContext.sessionStartedAtISO).getTime();
+      if (Number.isNaN(start)) {
+        setSecondsUntilLock(null);
+        return;
+      }
+      const elapsed = (Date.now() - start) / 1000;
+      const left = Math.max(0, Math.floor(capSec - elapsed));
+      setSecondsUntilLock(left);
+      if (left <= 0 && !lockEmittedRef.current) {
+        lockEmittedRef.current = true;
+        onStudyLocked?.("time_cap");
+      }
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [
+    studyContext?.sessionStartedAtISO,
+    studyContext?.maxSessionMinutes,
+    onStudyLocked,
+  ]);
+
+  useEffect(() => {
+    if (!studyContext?.authToken || !studyContext?.studySessionId) return;
+
+    const ping = async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const res = await fetch(`${API_URL}/api/study/session/heartbeat/`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${studyContext.authToken}`,
+          },
+          body: JSON.stringify({
+            studySessionId: studyContext.studySessionId,
+            activeDeltaSeconds: 45,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (data.sessionLocked && !lockEmittedRef.current) {
+          lockEmittedRef.current = true;
+          onStudyLocked?.(data.lockReason || "time_cap");
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+
+    const id = setInterval(ping, 45000);
+    ping();
+    return () => clearInterval(id);
+  }, [studyContext?.authToken, studyContext?.studySessionId, onStudyLocked]);
 
   const sendMessage = async () => {
     const value = input.trim();
     if (!value || isLoading || !conversationId) return;
+    if (
+      studyContext &&
+      secondsUntilLock !== null &&
+      secondsUntilLock <= 0
+    ) {
+      if (!lockEmittedRef.current) {
+        lockEmittedRef.current = true;
+        onStudyLocked?.("time_cap");
+      }
+      return;
+    }
 
     const userMsg = { from: "user", text: value };
     setMessages((msgs) => [...msgs, userMsg]);
     setInput("");
     setIsLoading(true);
 
-    // save user message (no need to await)
     saveMessageToBackend("user", userMsg.text);
 
     try {
@@ -201,21 +312,38 @@ export default function Chat({ selectedCharacter, username }) {
         userName: username,
         history: toLLMHistory(nextMessages.slice(-8)),
       };
+      if (studyContext?.studySessionId) {
+        payload.studySessionId = studyContext.studySessionId;
+      }
+
+      const headers = { "Content-Type": "application/json" };
+      if (studyContext?.authToken) {
+        headers.Authorization = `Bearer ${studyContext.authToken}`;
+      }
 
       const res = await fetch(`${API_URL}/api/chat/`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(payload),
       });
 
+      const raw = await res.json().catch(() => ({}));
+      if (raw.sessionLocked) {
+        if (!lockEmittedRef.current) {
+          lockEmittedRef.current = true;
+          onStudyLocked?.(raw.lockReason || "time_cap");
+        }
+        setIsLoading(false);
+        return;
+      }
+
       if (!res.ok) throw new Error("Request failed");
 
-      const { reply } = await res.json();
+      const { reply } = raw;
       const botMsg = { from: "bot", text: reply };
 
       setMessages((msgs) => [...msgs, botMsg]);
 
-      // save bot message
       saveMessageToBackend("bot", botMsg.text);
     } catch (_e) {
       const errMsg = {
@@ -229,29 +357,47 @@ export default function Chat({ selectedCharacter, username }) {
     }
   };
 
+  const chKey = selectedCharacter || "default";
   const prettyName =
-    selectedCharacter?.charAt(0).toUpperCase() + selectedCharacter?.slice(1);
+    chKey.charAt(0).toUpperCase() + chKey.slice(1);
 
-  const inputDisabled = isLoading || !conversationId;
+  const inputLocked =
+    isLoading ||
+    !conversationId ||
+    (studyContext &&
+      secondsUntilLock !== null &&
+      secondsUntilLock <= 0);
+
+  const inputDisabled = inputLocked;
+
+  const warnFifteen =
+    studyContext &&
+    secondsUntilLock !== null &&
+    secondsUntilLock > 0 &&
+    secondsUntilLock <= 300;
 
   return (
     <div className="chat-screen">
-      {/* decorative corners */}
       <span className="corner tl" aria-hidden="true"></span>
       <span className="corner tr" aria-hidden="true"></span>
       <span className="corner bl" aria-hidden="true"></span>
       <span className="corner br" aria-hidden="true"></span>
 
-      {/* header */}
       <header className="chat-hero">
         <h1 className="hero-title xl">Vamos explorar um mundo de histórias!</h1>
         <p className="hero-sub">
           A conversar com{" "}
           {selectedCharacter === "default" ? "Reading Coach" : prettyName}
         </p>
+        {studyContext && secondsUntilLock !== null ? (
+          <p className={`session-timer ${warnFifteen ? "session-timer-warn" : ""}`}>
+            Tempo restante: {Math.floor(secondsUntilLock / 60)}:
+            {String(secondsUntilLock % 60).padStart(2, "0")}
+            {warnFifteen ? " — brevemente termina o tempo da sessão" : ""}
+          </p>
+        ) : null}
       </header>
 
-      {/* messages */}
       <div className="chat-body">
         <div className="messages" ref={listRef}>
           {messages.map((m, i) => {
@@ -308,12 +454,10 @@ export default function Chat({ selectedCharacter, username }) {
             </div>
           )}
 
-          {/* scroll anchor */}
           <div ref={endRef} />
         </div>
       </div>
 
-      {/* input */}
       <div className="input-wrap">
         <input
           className="chat-input"
@@ -323,7 +467,11 @@ export default function Chat({ selectedCharacter, username }) {
             e.key === "Enter" && !inputDisabled && sendMessage()
           }
           placeholder={
-            !conversationId ? "A preparar a conversa..." : "Escreve aqui..."
+            !conversationId
+              ? "A preparar a conversa..."
+              : inputLocked && studyContext
+                ? "Tempo da sessão terminou."
+                : "Escreve aqui..."
           }
           disabled={inputDisabled}
         />

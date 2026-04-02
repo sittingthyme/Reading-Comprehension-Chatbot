@@ -5,9 +5,16 @@ import SelectionScreen from "./components/SelectionScreen.jsx";
 import NameInput from "./components/NameInput.jsx";
 import CharacterSelection from "./components/CharacterSelection.jsx";
 import Chat from "./components/Chat.jsx";
+import EnrollmentGate from "./components/EnrollmentGate.jsx";
+import StudySessionDashboard from "./components/StudySessionDashboard.jsx";
+
+const STUDY_GATING = import.meta.env.VITE_STUDY_GATING !== "false";
 
 export default function App() {
-  // modes: 'select' | 'name' | 'default' | 'personalized' | 'chat'
+  const [studyToken, setStudyToken] = useState(() =>
+    localStorage.getItem("studyAuthToken")
+  );
+
   const [mode, setMode] = useState("select");
   const [username, setUsername] = useState(null);
   const [selectedCharacter, setSelectedCharacter] = useState(null);
@@ -17,6 +24,32 @@ export default function App() {
     setMode("select");
     setUsername(null);
   };
+
+  if (STUDY_GATING) {
+    if (!studyToken) {
+      return (
+        <div className="app-container">
+          <EnrollmentGate
+            onEnrolled={(token) => {
+              localStorage.setItem("studyAuthToken", token);
+              setStudyToken(token);
+            }}
+          />
+        </div>
+      );
+    }
+    return (
+      <div className="app-container">
+        <StudySessionDashboard
+          authToken={studyToken}
+          onLogout={() => {
+            localStorage.removeItem("studyAuthToken");
+            setStudyToken(null);
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="app-container">

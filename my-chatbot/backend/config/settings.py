@@ -10,9 +10,12 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 import os
-from dotenv import load_dotenv
-load_dotenv() 
 from pathlib import Path
+
+import dj_database_url
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -80,40 +83,17 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
-
-# Use PostgreSQL in production if DATABASE_URL is set, otherwise use SQLite
-DATABASE_URL = os.getenv('DATABASE_URL')
-if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
-    # Parse PostgreSQL URL (format: postgres://user:password@host:port/dbname)
-    import re
-    db_match = re.match(r'postgres://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)', DATABASE_URL)
-    if db_match:
-        DATABASES = {
-            'default': {
-                'ENGINE': 'django.db.backends.postgresql',
-                'NAME': db_match.group(5),
-                'USER': db_match.group(1),
-                'PASSWORD': db_match.group(2),
-                'HOST': db_match.group(3),
-                'PORT': db_match.group(4),
-            }
-        }
-    else:
-        # Fallback to SQLite if parsing fails
-        DATABASES = {
-            'default': {
-                'ENGINE': 'django.db.backends.sqlite3',
-                'NAME': BASE_DIR / 'db.sqlite3',
-            }
-        }
-else:
-    # Development: Use SQLite
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
+#
+# If DATABASE_URL is set (postgres:// or postgresql:// from Heroku, Render, Railway, etc.),
+# dj-database-url configures PostgreSQL. Otherwise use local SQLite.
+_sqlite_url = f"sqlite:///{(BASE_DIR / 'db.sqlite3').resolve().as_posix()}"
+DATABASES = {
+    "default": dj_database_url.config(
+        default=_sqlite_url,
+        conn_max_age=600,
+        ssl_require=os.getenv("DATABASE_SSL_REQUIRE", "false").lower() == "true",
+    )
+}
 
 
 # Password validation
@@ -175,3 +155,53 @@ if not DEBUG:
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = 'DENY'
+
+# -----------------------------------------------------------------------------
+# Study gating (sequential sessions, dual arms, 20m wall lock)
+# -----------------------------------------------------------------------------
+# Comma-separated enrollment codes per arm (defaults allow local dev without .env).
+STUDY_CODES_PERSONALIZED = os.getenv(
+    "STUDY_CODES_PERSONALIZED",
+    "DEV-PERSONALIZED",
+)
+STUDY_CODES_GENERIC = os.getenv(
+    "STUDY_CODES_GENERIC",
+    "DEV-GENERIC",
+)
+# Calendar: first day of week 1 in study timezone (YYYY-MM-DD).
+STUDY_START_DATE = os.getenv("STUDY_START_DATE", "2020-01-01")
+# IANA timezone for week boundaries and session clock.
+STUDY_TIMEZONE = os.getenv("STUDY_TIMEZONE", "UTC")
+STUDY_TOTAL_WEEKS = int(os.getenv("STUDY_TOTAL_WEEKS", "8"))
+STUDY_INACTIVITY_SECONDS = int(os.getenv("STUDY_INACTIVITY_SECONDS", "600"))
+STUDY_HEARTBEAT_MAX_DELTA_SECONDS = int(
+    os.getenv("STUDY_HEARTBEAT_MAX_DELTA_SECONDS", "120")
+)
+STUDY_MEMORY_MAX_CHARS = int(os.getenv("STUDY_MEMORY_MAX_CHARS", "6000"))
+STUDY_PROFILE_PERSONALIZED_MAX_SESSION_MINUTES = int(
+    os.getenv("STUDY_PROFILE_PERSONALIZED_MAX_SESSION_MINUTES", "20")
+)
+STUDY_PROFILE_GENERIC_MAX_SESSION_MINUTES = int(
+    os.getenv("STUDY_PROFILE_GENERIC_MAX_SESSION_MINUTES", "20")
+)
+STUDY_PROFILE_PERSONALIZED_DEFAULT_CHARACTER = os.getenv(
+    "STUDY_PROFILE_PERSONALIZED_DEFAULT_CHARACTER",
+    "default",
+)
+STUDY_PROFILE_GENERIC_DEFAULT_CHARACTER = os.getenv(
+    "STUDY_PROFILE_GENERIC_DEFAULT_CHARACTER",
+    "default",
+)
+
+# Return login (login code + PIN)
+STUDY_PIN_MIN_LENGTH = int(os.getenv("STUDY_PIN_MIN_LENGTH", "4"))
+STUDY_PIN_MAX_LENGTH = int(os.getenv("STUDY_PIN_MAX_LENGTH", "6"))
+STUDY_LOGIN_CODE_LENGTH = int(os.getenv("STUDY_LOGIN_CODE_LENGTH", "10"))
+STUDY_ROTATE_TOKEN_ON_LOGIN = (
+    os.getenv("STUDY_ROTATE_TOKEN_ON_LOGIN", "true").lower() == "true"
+)
+
+# Production data protection (hosting + ops; Django cannot encrypt disks by itself):
+# - Use HTTPS (see SECURE_SSL_REDIRECT when DEBUG=False).
+# - Use a managed database with encryption at rest and restricted network access.
+# - Restrict Django admin; rotate SECRET_KEY; define retention in participant consent.

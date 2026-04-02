@@ -22,6 +22,9 @@
     margin: 0;
     display: grid;
     place-items: center;
+    background: #e8eef5;
+    color: #0f172a;
+    color-scheme: light;
   }
   
   /* ===== Name Input Screen ===== */
@@ -294,4 +297,258 @@
   }
   
   .msg-row.left .bubble { margin-left: 4px; }  
-  .msg-row.right .bubble { margin-right: 4px; } 
+  .msg-row.right .bubble { margin-right: 4px; }  
+
+  /* Study gating UI — light card so text is never dark-on-dark */
+  .study-enroll,
+  .study-lobby,
+  .post-survey {
+    width: min(520px, 92vw);
+    padding: 32px 28px;
+    text-align: center;
+    box-sizing: border-box;
+    background: #ffffff;
+    color: #0f172a;
+    border-radius: 20px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.18);
+    color-scheme: light;
+  }
+  .study-enroll .hero-title,
+  .study-lobby .hero-title,
+  .post-survey .hero-title {
+    color: #0f172a;
+  }
+  .study-enroll .hero-sub,
+  .study-lobby .hero-sub,
+  .post-survey .hero-sub {
+    color: #475569;
+  }
+  .enroll-form,
+  .survey-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    text-align: left;
+    margin-top: 16px;
+    align-items: stretch;
+  }
+  .enroll-form label,
+  .survey-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #334155;
+  }
+  .enroll-field-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 12px 14px;
+    font-size: 16px;
+    border: 2px solid #cbd5e1;
+    border-radius: 12px;
+    background: #fff;
+    color: #0f172a;
+  }
+  .enroll-field-input:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.22);
+  }
+  .enroll-field-input::placeholder {
+    color: #94a3b8;
+  }
+  .study-primary-btn {
+    margin-top: 4px;
+    width: 100%;
+    padding: 14px 20px;
+    font-size: 16px;
+    font-weight: 600;
+    color: #fff;
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: transform 0.12s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+  }
+  .study-primary-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 28px rgba(37, 99, 235, 0.35);
+  }
+  .study-primary-btn:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+  }
+  .study-secondary-btn {
+    padding: 12px 20px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #334155;
+    background: #f1f5f9;
+    border: 2px solid #cbd5e1;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+  .study-secondary-btn:hover {
+    background: #e2e8f0;
+    border-color: #94a3b8;
+  }
+  .enroll-error {
+    color: #b91c1c;
+    font-size: 14px;
+    margin: 0;
+    text-align: center;
+  }
+  .enroll-mode-tabs {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    margin: 20px 0 8px;
+    flex-wrap: wrap;
+  }
+  .enroll-tab {
+    padding: 10px 18px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #64748b;
+    background: #f1f5f9;
+    border: 2px solid #e2e8f0;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+  .enroll-tab:hover {
+    background: #e2e8f0;
+  }
+  .enroll-tab-active {
+    color: #fff;
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    border-color: transparent;
+  }
+  .enroll-mode-hint {
+    text-align: center;
+    margin: 0 0 8px;
+  }
+  .enroll-hint-secondary {
+    display: block;
+    margin-top: 8px;
+    font-size: 0.92em;
+    font-weight: 400;
+    opacity: 0.88;
+  }
+  .enroll-success-card {
+    margin: 20px 0;
+    padding: 20px;
+    background: #f0f9ff;
+    border: 2px solid #bae6fd;
+    border-radius: 16px;
+    text-align: center;
+  }
+  .enroll-success-label {
+    margin: 0 0 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #0369a1;
+  }
+  .enroll-success-code {
+    margin: 0;
+    font-size: clamp(18px, 4vw, 26px);
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: #0c4a6e;
+    font-family: ui-monospace, monospace;
+    word-break: break-all;
+  }
+  .session-list {
+    list-style: none;
+    padding: 0;
+    margin: 16px 0;
+    text-align: left;
+    max-height: 40vh;
+    overflow-y: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 12px;
+    background: #f8fafc;
+    color: #334155;
+  }
+  .session-list li {
+    padding: 6px 0;
+    border-bottom: 1px solid #e2e8f0;
+    font-size: 14px;
+  }
+  .session-focus {
+    background: #eff6ff;
+    margin: 0 -8px;
+    padding: 8px !important;
+    border-radius: 8px;
+  }
+  .study-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    margin-top: 8px;
+  }
+  .likert-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .likert-scale {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+  .likert-opt {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 14px;
+    color: #334155;
+  }
+  .post-survey .survey-form h3 {
+    color: #0f172a;
+    font-size: 1rem;
+    margin: 12px 0 4px;
+  }
+  .survey-textarea {
+    width: 100%;
+    box-sizing: border-box;
+    border-radius: 12px;
+    border: 2px solid #cbd5e1;
+    padding: 10px;
+    font-family: inherit;
+    font-size: 15px;
+    background: #fff;
+    color: #0f172a;
+  }
+  .survey-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .survey-actions .study-primary-btn {
+    width: auto;
+    min-width: 140px;
+  }
+  .survey-actions .study-secondary-btn {
+    width: auto;
+  }
+  .session-timer {
+    font-size: 14px;
+    color: #4b5563;
+    margin-top: 8px;
+  }
+  .session-timer-warn {
+    color: #b45309;
+    font-weight: 600;
+  }

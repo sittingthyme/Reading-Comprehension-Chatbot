@@ -1,2 +1,5 @@
 my-chatbot/.env
 my-chatbot/backend/.env
+my-chatbot/backend/.venv/
+my-chatbot/backend/venv/
+my-chatbot/backend/.deploy-venv/

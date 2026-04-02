@@ -18,8 +18,14 @@ from typing import Dict, List, Optional
 
 from openai import OpenAI
 from .scaffold_policy import LadderPolicy, Move, render_move
-from .models import Conversation
+from .models import Conversation, StudySession
 from .audit import compute_audit
+from .study_services import (
+    chat_should_lock,
+    get_memory_context_for_chat,
+    participant_from_token,
+    touch_activity,
+)
 
 # ------------------------------
 # OpenAI client
@@ -191,7 +197,13 @@ def _name_prompt(user_name: str) -> str:
         "If the student asks what their name is, answer directly with their name."
     )
 
-def build_system_prompt(character_key: str, user_name: str, force_question: bool, move: Move) -> str:
+def build_system_prompt(
+    character_key: str,
+    user_name: str,
+    force_question: bool,
+    move: Move,
+    memory_context: str = "",
+) -> str:
     persona = CHARACTER_PERSONAS.get(character_key, CHARACTER_PERSONAS["default"])
 
     # Always include name guidance (even for default), so the model actually uses it
@@ -201,6 +213,9 @@ def build_system_prompt(character_key: str, user_name: str, force_question: bool
         base += DEFAULT_PROMPT + "\n\n" + COACHING_PROMPT + "\n\n"
 
     base += MOVE_GUIDELINES[move]
+
+    if memory_context:
+        base += memory_context
 
     if force_question:
         base += (
@@ -222,6 +237,14 @@ def sanitize_history(items: List[Dict[str, str]]) -> List[Dict[str, str]]:
 
 
 _POLICY_STORE: Dict[str, LadderPolicy] = {}
+
+
+def _auth_bearer(request) -> Optional[str]:
+    h = request.META.get("HTTP_AUTHORIZATION", "") or ""
+    if h.startswith("Bearer "):
+        return h[7:].strip()
+    return None
+
 
 def _session_key(request) -> str:
     if not request.session.session_key:
@@ -313,6 +336,30 @@ def save_message(request):
     except Conversation.DoesNotExist:
         return JsonResponse({"error": "Conversation not found"}, status=404)
 
+    if convo.participant_id:
+        token = _auth_bearer(request)
+        if not token:
+            return JsonResponse({"error": "Unauthorized"}, status=401)
+        part = participant_from_token(token)
+        if not part or part.id != convo.participant_id:
+            return JsonResponse({"error": "Unauthorized"}, status=401)
+        ss = (
+            StudySession.objects.filter(
+                conversation=convo,
+                participant=part,
+                status=StudySession.Status.IN_PROGRESS,
+            )
+            .first()
+        )
+        if ss:
+            lock = chat_should_lock(ss, part)
+            if lock:
+                return JsonResponse(
+                    {"sessionLocked": True, "lockReason": lock},
+                    status=403,
+                )
+            touch_activity(ss)
+
     msgs = convo.messages or []
     msgs.append(
         {
@@ -355,6 +402,59 @@ class ChatAPIView(APIView):
             user_name: str = (request.data.get("userName") or "").strip()
             history: List[Dict[str, str]] = sanitize_history(request.data.get("history") or [])
 
+            memory_context = ""
+            raw_study_sid = request.data.get("studySessionId") or request.data.get(
+                "study_session_id"
+            )
+            token = _auth_bearer(request)
+            if raw_study_sid:
+                if not token:
+                    return Response(
+                        {"error": "Unauthorized", "sessionLocked": False},
+                        status=status.HTTP_401_UNAUTHORIZED,
+                    )
+                participant = participant_from_token(token)
+                if not participant:
+                    return Response(
+                        {"error": "Unauthorized", "sessionLocked": False},
+                        status=status.HTTP_401_UNAUTHORIZED,
+                    )
+                try:
+                    study_session = StudySession.objects.select_related("conversation").get(
+                        id=raw_study_sid,
+                        participant=participant,
+                    )
+                except StudySession.DoesNotExist:
+                    return Response(
+                        {"error": "Invalid study session", "sessionLocked": False},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if study_session.status != StudySession.Status.IN_PROGRESS:
+                    return Response(
+                        {"error": "Session not active", "sessionLocked": False},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                lock = chat_should_lock(study_session, participant)
+                if lock:
+                    return Response(
+                        {
+                            "sessionLocked": True,
+                            "lockReason": lock,
+                            "reply": "",
+                            "move": "NUDGE",
+                            "log_ok": True,
+                            "violations": [],
+                            "moves": [],
+                        },
+                        status=status.HTTP_200_OK,
+                    )
+                touch_activity(study_session)
+                convo = study_session.conversation
+                if convo:
+                    character = convo.character
+                    user_name = convo.user_name
+                memory_context = get_memory_context_for_chat(participant)
+
             if not user_msg:
                 return Response(
                     {
@@ -375,6 +475,7 @@ class ChatAPIView(APIView):
                 user_name=user_name,
                 force_question=force_q,
                 move=move,
+                memory_context=memory_context,
             )
 
             messages = [
