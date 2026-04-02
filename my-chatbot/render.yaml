@@ -28,10 +28,10 @@ services:
       - key: CSRF_TRUSTED_ORIGINS
         sync: false
 
+  # Static sites: omit `plan` — Render does not accept `plan: free` for runtime: static (type web).
   - type: web
     name: reading-chatbot-frontend
     runtime: static
-    plan: free
     rootDir: .
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
