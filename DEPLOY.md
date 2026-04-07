@@ -50,7 +50,7 @@ Optional env vars: [`my-chatbot/.env.example`](my-chatbot/.env.example).
 
 ## 3. Render (example)
 
-A sample blueprint lives at [`my-chatbot/render.yaml`](my-chatbot/render.yaml). In the Render dashboard, set the service **root directory** to **`my-chatbot`** so `rootDir: backend` and the static site paths resolve correctly.
+A sample blueprint lives at [`my-chatbot/render.yaml`](my-chatbot/render.yaml). **`rootDir` values are relative to the Git repository root** (`Reading-Comprehension-Chatbot`), e.g. `my-chatbot` for the frontend and `my-chatbot/backend` for the API. **`staticPublishPath`** is also from the repo root (`my-chatbot/dist`), not from `rootDir`. In the Render dashboard, leave **Root Directory** empty (repo root) unless you know you overrode it—if you set Root Directory to `my-chatbot`, change the blueprint `rootDir` entries to `.` and `backend` and set `staticPublishPath` to `./dist`.
 
 After the first deploy, set `CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS`, and `VITE_API_URL` to your real frontend and backend URLs, then redeploy the frontend so it picks up `VITE_API_URL`.
 

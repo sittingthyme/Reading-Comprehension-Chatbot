@@ -1,11 +1,12 @@
-# Blueprint for Render.com — set the service "Root Directory" to `my-chatbot` in the dashboard
-# so rootDir paths below resolve correctly.
+# Blueprint for Render.com — paths are relative to the Git repository root (Reading-Comprehension-Chatbot).
+# Leave the Render dashboard "Root Directory" empty unless you use a monorepo subfolder as root;
+# if you set Root Directory to `my-chatbot`, use rootDir `backend` / `.` and staticPublishPath `./dist`.
 services:
   - type: web
     name: reading-chatbot-api
     runtime: python
     plan: free
-    rootDir: backend
+    rootDir: my-chatbot/backend
     buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate --noinput
     startCommand: gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
     envVars:
@@ -32,9 +33,10 @@ services:
   - type: web
     name: reading-chatbot-frontend
     runtime: static
-    rootDir: .
+    rootDir: my-chatbot
     buildCommand: npm install && npm run build
-    staticPublishPath: ./dist
+    # Publish path is relative to the repository root (not rootDir); build writes to my-chatbot/dist.
+    staticPublishPath: my-chatbot/dist
     envVars:
       - key: VITE_API_URL
         sync: false
