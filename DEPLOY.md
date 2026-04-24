@@ -52,7 +52,7 @@ Optional env vars: [`my-chatbot/.env.example`](my-chatbot/.env.example).
 
 ## 3. Render (example)
 
-A sample blueprint lives at [`my-chatbot/render.yaml`](my-chatbot/render.yaml). **`rootDir` values are relative to the Git repository root** (`Reading-Comprehension-Chatbot`), e.g. `my-chatbot` for the frontend and `my-chatbot/backend` for the API. **`staticPublishPath`** is also from the repo root (`my-chatbot/dist`), not from `rootDir`. In the Render dashboard, leave **Root Directory** empty (repo root) unless you overrode it—if you set Root Directory to `my-chatbot`, change the blueprint `rootDir` entries to `.` and `backend` and set `staticPublishPath` to `./dist`.
+A sample blueprint lives at [`my-chatbot/render.yaml`](my-chatbot/render.yaml). Service **`rootDir`** is relative to the repository root (e.g. `my-chatbot` for the frontend). With a `rootDir` set, Render’s [monorepo docs](https://render.com/docs/monorepo-support) require **`staticPublishPath` (publish directory) to be relative to that same `rootDir`**—for this Vite app use `dist`, not `my-chatbot/dist`. In the Render dashboard, leave **Root Directory** empty at the repo level unless you overrode it—if you set Root Directory to `my-chatbot`, change the blueprint `rootDir` entries to `.` and `backend` accordingly.
 
 The blueprint:
 

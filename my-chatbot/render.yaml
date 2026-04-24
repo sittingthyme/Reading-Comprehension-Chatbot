@@ -1,6 +1,6 @@
-# Blueprint for Render.com — paths are relative to the repository root
-# (Reading-Comprehension-Chatbot). Leave the Render dashboard "Root Directory" empty
-# unless you use a subfolder; see ../DEPLOY.md
+# Blueprint for Render.com — with rootDir set, staticPublishPath is relative to that
+# root (see Render "Monorepo Support"). Leave the dashboard Root Directory empty at repo
+# level unless you use a subfolder; see ../DEPLOY.md
 #
 # - Vite bakes VITE_API_URL at static build: we pull the API service RENDER_EXTERNAL_URL
 #   so the live site calls your API (and Postgres) instead of localhost.
@@ -36,7 +36,7 @@ services:
     runtime: static
     rootDir: my-chatbot
     buildCommand: npm install && npm run build
-    staticPublishPath: my-chatbot/dist
+    staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
         fromService:
