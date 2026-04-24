@@ -11,11 +11,19 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 import dj_database_url
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+def _host_from_url(url: str) -> str | None:
+    if not url or not str(url).strip():
+        return None
+    h = urlparse(str(url).strip()).hostname
+    return h or None
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -29,9 +37,15 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-r_nmpovf4s4dh89130ka(&q(r_
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
-# Get allowed hosts from environment variable (comma-separated)
-ALLOWED_HOSTS_STR = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1')
-ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS_STR.split(',') if host.strip()]
+# Comma-separated; on Render, also trust RENDER_EXTERNAL_URL so DisallowedHost does not
+# require pasting the API hostname (see fromService / dashboard env in render.yaml).
+_default_allowed = "localhost,127.0.0.1" if os.getenv("DEBUG", "True").lower() == "true" else ""
+ALLOWED_HOSTS_STR = os.getenv("ALLOWED_HOSTS", _default_allowed)
+ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS_STR.split(",") if host.strip()]
+for _url in (os.environ.get("RENDER_EXTERNAL_URL"),):
+    h = _host_from_url(_url) if _url else None
+    if h and h not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(h)
 
 
 # Application definition
@@ -139,13 +153,36 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# CORS Configuration
-CORS_ALLOWED_ORIGINS_STR = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173')
-CORS_ALLOWED_ORIGINS = [origin.strip() for origin in CORS_ALLOWED_ORIGINS_STR.split(',') if origin.strip()]
+# CORS: explicit origins; optional regex so *.onrender.com static sites work without
+# pre-copying the preview URL. Disable with CORS_TRUST_ONRENDER=false.
+CORS_ALLOWED_ORIGINS_STR = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173")
+CORS_ALLOWED_ORIGINS = [origin.strip() for origin in CORS_ALLOWED_ORIGINS_STR.split(",") if origin.strip()]
 
-# CSRF Configuration
-CSRF_TRUSTED_ORIGINS_STR = os.getenv('CSRF_TRUSTED_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173')
-CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in CSRF_TRUSTED_ORIGINS_STR.split(',') if origin.strip()]
+# Fallback when CORS_* env is unset: allow any Render HTTPS app origin.
+CORS_ALLOWED_ORIGIN_REGEXES = []
+if (
+    not DEBUG
+    and os.getenv("CORS_TRUST_ONRENDER", "true").lower() == "true"
+    and bool(os.environ.get("RENDER", "").strip())
+):
+    CORS_ALLOWED_ORIGIN_REGEXES.append(r"^https://[a-z0-9\-.]+\.onrender\.com$")
+
+CSRF_TRUSTED_ORIGINS_STR = os.getenv(
+    "CSRF_TRUSTED_ORIGINS",
+    "http://localhost:5173,http://127.0.0.1:5173",
+)
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip() for origin in CSRF_TRUSTED_ORIGINS_STR.split(",") if origin.strip()
+]
+# Single origin helper (e.g. set from a Render blueprint to the static site URL)
+_fo = os.environ.get("FRONTEND_ORIGIN", "").strip()
+if _fo and _fo not in CSRF_TRUSTED_ORIGINS:
+    CSRF_TRUSTED_ORIGINS.append(_fo)
+# If CORS lists the production frontend explicitly, also trust it for CSRF.
+if not DEBUG and bool(os.environ.get("RENDER", "").strip()):
+    for o in CORS_ALLOWED_ORIGINS:
+        if o.startswith("https://") and o not in CSRF_TRUSTED_ORIGINS:
+            CSRF_TRUSTED_ORIGINS.append(o)
 
 # Security settings for production
 if not DEBUG:

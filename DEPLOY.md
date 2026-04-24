@@ -26,7 +26,9 @@ On **Heroku**, the [`Procfile`](my-chatbot/backend/Procfile) `release:` line run
 | `CORS_ALLOWED_ORIGINS` | Comma-separated **frontend** origins, e.g. `https://app.example.com` |
 | `CSRF_TRUSTED_ORIGINS` | Same as frontend origins, with scheme (needed for trusted cross-origin CSRF). |
 | `DATABASE_URL` | Optional locally; use managed **PostgreSQL** in production. Supports `postgres://` and `postgresql://` (via `dj-database-url`). |
-| `DATABASE_SSL_REQUIRE` | Set `true` if your DB requires SSL (common on managed Postgres). |
+| `DATABASE_SSL_REQUIRE` | Set `true` for Render / most managed Postgres (see `render.yaml` example). |
+| `CORS_TRUST_ONRENDER` | On Render, defaults to allowing `https://*.onrender.com` when `RENDER` is set, so the SPA and API on different `*.onrender.com` hostnames can talk without hand-copying URLs. Set `false` if you use only explicit `CORS_ALLOWED_ORIGINS`. |
+| `FRONTEND_ORIGIN` | Optional: exact `https://` origin of the static app for `CSRF_TRUSTED_ORIGINS` (Django has no CORS-style regex for CSRF). |
 | `OPENAI_API_KEY` | Required for chat. |
 | `STUDY_*` | Enrollment codes, dates, timezone, PIN length, etc. |
 
@@ -50,9 +52,20 @@ Optional env vars: [`my-chatbot/.env.example`](my-chatbot/.env.example).
 
 ## 3. Render (example)
 
-A sample blueprint lives at [`my-chatbot/render.yaml`](my-chatbot/render.yaml). **`rootDir` values are relative to the Git repository root** (`Reading-Comprehension-Chatbot`), e.g. `my-chatbot` for the frontend and `my-chatbot/backend` for the API. **`staticPublishPath`** is also from the repo root (`my-chatbot/dist`), not from `rootDir`. In the Render dashboard, leave **Root Directory** empty (repo root) unless you know you overrode it—if you set Root Directory to `my-chatbot`, change the blueprint `rootDir` entries to `.` and `backend` and set `staticPublishPath` to `./dist`.
+A sample blueprint lives at [`my-chatbot/render.yaml`](my-chatbot/render.yaml). **`rootDir` values are relative to the Git repository root** (`Reading-Comprehension-Chatbot`), e.g. `my-chatbot` for the frontend and `my-chatbot/backend` for the API. **`staticPublishPath`** is also from the repo root (`my-chatbot/dist`), not from `rootDir`. In the Render dashboard, leave **Root Directory** empty (repo root) unless you overrode it—if you set Root Directory to `my-chatbot`, change the blueprint `rootDir` entries to `.` and `backend` and set `staticPublishPath` to `./dist`.
 
-After the first deploy, set `CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS`, and `VITE_API_URL` to your real frontend and backend URLs, then redeploy the frontend so it picks up `VITE_API_URL`.
+The blueprint:
+
+- Wires `DATABASE_URL` to the managed Postgres and sets `DATABASE_SSL_REQUIRE=true`.
+- Runs **`migrate` before `collectstatic`** so the app uses the linked database from the first build.
+- Sets **`VITE_API_URL` from the API service** (`fromService` → `RENDER_EXTERNAL_URL`) so the static build actually calls your deployed API (this is what makes rows appear in Render Postgres instead of a local `db.sqlite3`).
+
+Django is configured so that, on Render (`RENDER=1`):
+
+- `ALLOWED_HOSTS` is derived from the API’s `RENDER_EXTERNAL_URL` as well as any explicit `ALLOWED_HOSTS`.
+- CORS can allow the static site using the `*.onrender.com` regex (see `CORS_TRUST_ONRENDER` in settings).
+
+**Custom domains:** add your real `https://` origins to `CORS_ALLOWED_ORIGINS` / `CSRF_TRUSTED_ORIGINS` in the API service and rebuild the frontend with `VITE_API_URL` pointing at the API. If you disable the regex, set `CORS_TRUST_ONRENDER=false` and use explicit lists only.
 
 ## 4. Single VPS (optional)
 

@@ -1,13 +1,19 @@
-# Blueprint for Render.com — paths are relative to the Git repository root (Reading-Comprehension-Chatbot).
-# Leave the Render dashboard "Root Directory" empty unless you use a monorepo subfolder as root;
-# if you set Root Directory to `my-chatbot`, use rootDir `backend` / `.` and staticPublishPath `./dist`.
+# Blueprint for Render.com — paths are relative to the repository root
+# (Reading-Comprehension-Chatbot). Leave the Render dashboard "Root Directory" empty
+# unless you use a subfolder; see ../DEPLOY.md
+#
+# - Vite bakes VITE_API_URL at static build: we pull the API service RENDER_EXTERNAL_URL
+#   so the live site calls your API (and Postgres) instead of localhost.
+# - The API does not need the static URL in CORS: config/settings.py allows
+#   https://*.onrender.com when RENDER is set (CORS_TRUST_ONRENDER, default on).
+# - ALLOWED_HOSTS includes the hostname from RENDER_EXTERNAL_URL on the API service.
 services:
   - type: web
     name: reading-chatbot-api
     runtime: python
     plan: free
     rootDir: my-chatbot/backend
-    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate --noinput
+    buildCommand: pip install -r requirements.txt && python manage.py migrate --noinput && python manage.py collectstatic --noinput
     startCommand: gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
     envVars:
       - key: PYTHON_VERSION
@@ -22,24 +28,21 @@ services:
         fromDatabase:
           name: reading-chatbot-db
           property: connectionString
-      - key: ALLOWED_HOSTS
-        sync: false
-      - key: CORS_ALLOWED_ORIGINS
-        sync: false
-      - key: CSRF_TRUSTED_ORIGINS
-        sync: false
+      - key: DATABASE_SSL_REQUIRE
+        value: "true"
 
-  # Static sites: omit `plan` — Render does not accept `plan: free` for runtime: static (type web).
   - type: web
     name: reading-chatbot-frontend
     runtime: static
     rootDir: my-chatbot
     buildCommand: npm install && npm run build
-    # Publish path is relative to the repository root (not rootDir); build writes to my-chatbot/dist.
     staticPublishPath: my-chatbot/dist
     envVars:
       - key: VITE_API_URL
-        sync: false
+        fromService:
+          name: reading-chatbot-api
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
 
 databases:
   - name: reading-chatbot-db
