@@ -52,7 +52,7 @@ Optional env vars: [`my-chatbot/.env.example`](my-chatbot/.env.example).
 
 ## 3. Render (example)
 
-A sample blueprint lives at [`my-chatbot/render.yaml`](my-chatbot/render.yaml). Service **`rootDir`** is relative to the repository root (e.g. `my-chatbot` for the frontend). With a `rootDir` set, Render’s [monorepo docs](https://render.com/docs/monorepo-support) require **`staticPublishPath` (publish directory) to be relative to that same `rootDir`**—for this Vite app use `dist`, not `my-chatbot/dist`. In the Render dashboard, leave **Root Directory** empty at the repo level unless you overrode it—if you set Root Directory to `my-chatbot`, change the blueprint `rootDir` entries to `.` and `backend` accordingly.
+A sample blueprint lives at [`my-chatbot/render.yaml`](my-chatbot/render.yaml). The **Python API** uses `rootDir: my-chatbot/backend`. The **static (Vite) service** is configured **without** a `rootDir` so the **Publish Directory** can stay **`my-chatbot/dist` relative to the repository root** (Render’s static sites resolve this from the repo root in this setup). The build command is `cd my-chatbot && npm install && npm run build`. If you set **Root Directory** in the Render dashboard to `my-chatbot` for the static service, the paths above no longer match—either clear Root Directory to the default (empty = repo root) or switch to building from that directory and set Publish Directory to `dist` only.
 
 The blueprint:
 
