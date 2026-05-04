@@ -1,6 +1,6 @@
-# Blueprint for Render.com. For the static site: do not set a per-service Root Directory
-# in the Render dashboard unless you change paths below. Frontend build/publish is defined
-# from the repo root: see ../DEPLOY.md
+# Blueprint for Render.com (repository root — Render auto-discovers ./render.yaml).
+# See DEPLOY.md. Do not set a per-service Root Directory in the dashboard unless you
+# change paths below.
 #
 # - Vite bakes VITE_API_URL at static build: we pull the API service RENDER_EXTERNAL_URL
 #   so the live site calls your API (and Postgres) instead of localhost.

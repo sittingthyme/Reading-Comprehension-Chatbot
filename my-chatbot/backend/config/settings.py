@@ -38,7 +38,7 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-r_nmpovf4s4dh89130ka(&q(r_
 DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
 # Comma-separated; on Render, also trust RENDER_EXTERNAL_URL so DisallowedHost does not
-# require pasting the API hostname (see fromService / dashboard env in render.yaml).
+# require pasting the API hostname (see fromService / root render.yaml).
 _default_allowed = "localhost,127.0.0.1" if os.getenv("DEBUG", "True").lower() == "true" else ""
 ALLOWED_HOSTS_STR = os.getenv("ALLOWED_HOSTS", _default_allowed)
 ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS_STR.split(",") if host.strip()]

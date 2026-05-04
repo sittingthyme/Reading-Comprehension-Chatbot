@@ -14,4 +14,4 @@ Django admin (local): http://127.0.0.1:8000/admin/
 
 ## Deployment
 
-See **[DEPLOY.md](DEPLOY.md)** for production hosting (split static frontend + Django API), environment variables, migrate/collectstatic, and the sample [`my-chatbot/render.yaml`](my-chatbot/render.yaml) for Render.
+See **[DEPLOY.md](DEPLOY.md)** for production hosting (split static frontend + Django API), environment variables, migrate/collectstatic, and the sample [`render.yaml`](render.yaml) at the repo root for Render.

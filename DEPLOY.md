@@ -10,7 +10,7 @@ The app has two parts: a **Vite/React** frontend in [`my-chatbot/`](my-chatbot/)
 
 **Every deploy:**
 
-1. `python manage.py migrate --noinput`
+1. `python manage.py migrate --noinput` (on **Render**, run this in **Pre-Deploy Command**, not in the build step — see §3 and root [`render.yaml`](render.yaml).)
 2. `python manage.py collectstatic --noinput` (WhiteNoise serves `STATIC_ROOT`)
 3. Start the web process: `gunicorn config.wsgi:application --bind 0.0.0.0:$PORT`
 
@@ -26,7 +26,7 @@ On **Heroku**, the [`Procfile`](my-chatbot/backend/Procfile) `release:` line run
 | `CORS_ALLOWED_ORIGINS` | Comma-separated **frontend** origins, e.g. `https://app.example.com` |
 | `CSRF_TRUSTED_ORIGINS` | Same as frontend origins, with scheme (needed for trusted cross-origin CSRF). |
 | `DATABASE_URL` | Optional locally; use managed **PostgreSQL** in production. Supports `postgres://` and `postgresql://` (via `dj-database-url`). |
-| `DATABASE_SSL_REQUIRE` | Set `true` for Render / most managed Postgres (see `render.yaml` example). |
+| `DATABASE_SSL_REQUIRE` | Set `true` for Render / most managed Postgres (see root [`render.yaml`](render.yaml)). |
 | `CORS_TRUST_ONRENDER` | On Render, defaults to allowing `https://*.onrender.com` when `RENDER` is set, so the SPA and API on different `*.onrender.com` hostnames can talk without hand-copying URLs. Set `false` if you use only explicit `CORS_ALLOWED_ORIGINS`. |
 | `FRONTEND_ORIGIN` | Optional: exact `https://` origin of the static app for `CSRF_TRUSTED_ORIGINS` (Django has no CORS-style regex for CSRF). |
 | `OPENAI_API_KEY` | Required for chat. |
@@ -52,7 +52,9 @@ Optional env vars: [`my-chatbot/.env.example`](my-chatbot/.env.example).
 
 ## 3. Render (example)
 
-A sample blueprint lives at [`my-chatbot/render.yaml`](my-chatbot/render.yaml). The **Python API** uses `rootDir: my-chatbot/backend`. The **static (Vite) service** is configured **without** a `rootDir` so the **Publish Directory** can stay **`my-chatbot/dist` relative to the repository root** (Render’s static sites resolve this from the repo root in this setup). The build command is `cd my-chatbot && npm install && npm run build`. If you set **Root Directory** in the Render dashboard to `my-chatbot` for the static service, the paths above no longer match—either clear Root Directory to the default (empty = repo root) or switch to building from that directory and set Publish Directory to `dist` only.
+The sample blueprint lives at the **repository root**: [`render.yaml`](render.yaml) (Render auto-discovers this path; a nested-only file is easy to miss). The **Python API** uses `rootDir: my-chatbot/backend`. The **static (Vite) service** is configured **without** a `rootDir` so the **Publish Directory** can stay **`my-chatbot/dist` relative to the repository root** (Render’s static sites resolve this from the repo root in this setup). The build command is `cd my-chatbot && npm install && npm run build`. If you set **Root Directory** in the Render dashboard to `my-chatbot` for the static service, the paths above no longer match—either clear Root Directory to the default (empty = repo root) or switch to building from that directory and set Publish Directory to `dist` only.
+
+**If deploy logs still show `migrate` inside the build command:** your web service is using a **dashboard override**, not this file. In Render: **Settings → Build & Deploy** — set **Build Command** to `pip install -r requirements.txt && python manage.py collectstatic --noinput` (no `migrate`), set **Pre-Deploy Command** to `python manage.py migrate --noinput`, save, and redeploy. Or delete the service and re-create from the Blueprint so settings sync from `render.yaml`.
 
 The blueprint:
 
