@@ -7,13 +7,16 @@
 # - The API does not need the static URL in CORS: config/settings.py allows
 #   https://*.onrender.com when RENDER is set (CORS_TRUST_ONRENDER, default on).
 # - ALLOWED_HOSTS includes the hostname from RENDER_EXTERNAL_URL on the API service.
+# - Do NOT run migrate in buildCommand: the build network often cannot resolve the
+#   managed Postgres host; use preDeployCommand so migrations run when the DB is reachable.
 services:
   - type: web
     name: reading-chatbot-api
     runtime: python
     plan: free
     rootDir: my-chatbot/backend
-    buildCommand: pip install -r requirements.txt && python manage.py migrate --noinput && python manage.py collectstatic --noinput
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
+    preDeployCommand: python manage.py migrate --noinput
     startCommand: gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
     envVars:
       - key: PYTHON_VERSION

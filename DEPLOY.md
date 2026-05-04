@@ -57,7 +57,7 @@ A sample blueprint lives at [`my-chatbot/render.yaml`](my-chatbot/render.yaml). 
 The blueprint:
 
 - Wires `DATABASE_URL` to the managed Postgres and sets `DATABASE_SSL_REQUIRE=true`.
-- Runs **`migrate` before `collectstatic`** so the app uses the linked database from the first build.
+- **Build**: `pip install` + `collectstatic` only (no DB required). **`preDeployCommand`** runs **`migrate`** after the build succeeds, when the web service can reach Postgres (running `migrate` during the build often fails with DNS errors on the internal DB hostname).
 - Sets **`VITE_API_URL` from the API service** (`fromService` → `RENDER_EXTERNAL_URL`) so the static build actually calls your deployed API (this is what makes rows appear in Render Postgres instead of a local `db.sqlite3`).
 
 Django is configured so that, on Render (`RENDER=1`):
