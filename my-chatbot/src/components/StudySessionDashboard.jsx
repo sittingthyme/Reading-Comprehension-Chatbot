@@ -3,7 +3,6 @@ import { defaultCharacter, characters } from "../data/characters";
 import NameInput from "./NameInput.jsx";
 import CharacterSelection from "./CharacterSelection.jsx";
 import Chat from "./Chat.jsx";
-import PostSessionSurvey from "./PostSessionSurvey.jsx";
 import CaiqPanasSurvey from "./CaiqPanasSurvey.jsx";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
@@ -20,6 +19,35 @@ async function studyFetch(path, authToken, options = {}) {
 }
 
 const STUDY_CHARACTER_KEY = "studySelectedCharacter";
+
+/** Satisfies backend gate before CAIQ-PANAS; no UI for this step. */
+async function autoSubmitReadingQuestionnaire(
+  authToken,
+  studySessionId,
+  slotIndex,
+  endReason
+) {
+  const body = {
+    studySessionId,
+    endReason: endReason || "completed_content",
+    likert: { rapport: 3, closeness: 3, flow: 3 },
+  };
+  if (slotIndex === 3) {
+    body.comprehension = {
+      main_response:
+        "Omitido — o questionário curto de leitura não foi apresentado nesta versão da app.",
+    };
+  }
+  const res = await studyFetch("/api/study/session/reading-questionnaire/", authToken, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || "Não foi possível preparar o questionário CAIQ-PANAS.");
+  }
+  return data.progress ?? null;
+}
 
 function readStoredCharacterKey() {
   const k = localStorage.getItem(STUDY_CHARACTER_KEY);
@@ -41,9 +69,9 @@ export default function StudySessionDashboard({ authToken, onLogout }) {
     () => localStorage.getItem("userName") || ""
   );
   const [selectedCharacter, setSelectedCharacter] = useState(readStoredCharacterKey);
-  const [phase, setPhase] = useState("lobby"); // lobby | name | character | chat | survey | caiq
+  const [phase, setPhase] = useState("lobby"); // lobby | name | character | chat | caiq
   const [playPayload, setPlayPayload] = useState(null);
-  const [surveyCtx, setSurveyCtx] = useState(null);
+  const [postChatBusy, setPostChatBusy] = useState(false);
 
   const loadProgress = useCallback(async () => {
     setErr("");
@@ -89,7 +117,7 @@ export default function StudySessionDashboard({ authToken, onLogout }) {
     const onBeforeUnload = (e) => {
       e.preventDefault();
       e.returnValue =
-        "Ainda tens de completar o questionário de leitura e o CAIQ-PANAS antes de saires.";
+        "Ainda tens de completar o questionário CAIQ-PANAS antes de saires.";
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
@@ -171,14 +199,29 @@ export default function StudySessionDashboard({ authToken, onLogout }) {
     setPhase("chat");
   };
 
-  const handleReadingQuestionnaireDone = () => {
-    setPhase("caiq");
+  const goToCaiqAfterChat = async (endReason) => {
+    if (!playPayload?.studySessionId) return;
+    setPostChatBusy(true);
+    setErr("");
+    try {
+      const p = await autoSubmitReadingQuestionnaire(
+        authToken,
+        playPayload.studySessionId,
+        playPayload.slotIndex,
+        endReason
+      );
+      if (p) setProgress(p);
+      setPhase("caiq");
+    } catch (e) {
+      setErr(e?.message || "Erro ao preparar o questionário.");
+    } finally {
+      setPostChatBusy(false);
+    }
   };
 
   const handleCaiqDone = async () => {
     setPhase("lobby");
     setPlayPayload(null);
-    setSurveyCtx(null);
     await loadProgress();
   };
 
@@ -228,22 +271,6 @@ export default function StudySessionDashboard({ authToken, onLogout }) {
     );
   }
 
-  if (phase === "survey" && surveyCtx && playPayload) {
-    return (
-      <PostSessionSurvey
-        authToken={authToken}
-        studySessionId={playPayload.studySessionId}
-        slotIndex={surveyCtx.slotIndex}
-        endReason={surveyCtx.endReason}
-        onDone={handleReadingQuestionnaireDone}
-        onCancel={() => {
-          setSurveyCtx(null);
-          setPhase("chat");
-        }}
-      />
-    );
-  }
-
   if (phase === "caiq") {
     const sid = playPayload?.studySessionId || progress?.focusSessionId;
     if (!sid) {
@@ -269,6 +296,16 @@ export default function StudySessionDashboard({ authToken, onLogout }) {
   if (phase === "chat" && playPayload) {
     return (
       <>
+        {postChatBusy ? (
+          <div className="post-chat-blocker" role="status" aria-live="polite">
+            <p>A preparar o questionário CAIQ-PANAS…</p>
+          </div>
+        ) : null}
+        {err ? (
+          <div className="study-chat-error-banner">
+            <p className="enroll-error">{err}</p>
+          </div>
+        ) : null}
         <Chat
           key={playPayload.studySessionId}
           selectedCharacter={playPayload.character}
@@ -282,33 +319,20 @@ export default function StudySessionDashboard({ authToken, onLogout }) {
             initialMessages: playPayload.messages,
           }}
           onStudyLocked={(reason) => {
-            setSurveyCtx({
-              slotIndex: playPayload.slotIndex,
-              endReason: reason === "time_cap" ? "time_cap" : "inactive_timeout",
-            });
-            setPhase("survey");
+            goToCaiqAfterChat(reason === "time_cap" ? "time_cap" : "inactive_timeout");
           }}
           onRequestEndSession={() => {
-            setSurveyCtx({
-              slotIndex: playPayload.slotIndex,
-              endReason: "explicit_exit",
-            });
-            setPhase("survey");
+            goToCaiqAfterChat("explicit_exit");
           }}
         />
         <div className="toolbar">
           <button
             type="button"
             className="study-secondary-btn"
-            onClick={() => {
-              setSurveyCtx({
-                slotIndex: playPayload.slotIndex,
-                endReason: "completed_content",
-              });
-              setPhase("survey");
-            }}
+            disabled={postChatBusy}
+            onClick={() => goToCaiqAfterChat("completed_content")}
           >
-            Terminar sessão e questionários
+            Ir para questionário CAIQ-PANAS
           </button>
         </div>
       </>
