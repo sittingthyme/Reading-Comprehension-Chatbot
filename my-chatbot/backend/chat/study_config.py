@@ -15,7 +15,7 @@ from .models import Participant
 
 @dataclass(frozen=True)
 class StudyProfile:
-    max_session_wall_minutes: int
+    max_session_wall_minutes: float
     memory_enabled: bool
     allow_character_selection: bool
     default_character: str
@@ -40,11 +40,22 @@ def resolve_enrollment_code(code: str) -> Optional[str]:
     return None
 
 
+def _wall_minutes_for_condition(condition: str) -> float:
+    dev_cap = int(getattr(settings, "STUDY_DEV_SESSION_CAP_SECONDS", 0) or 0)
+    if dev_cap > 0:
+        return dev_cap / 60.0
+    if condition == Participant.Condition.PERSONALIZED:
+        return float(
+            getattr(settings, "STUDY_PROFILE_PERSONALIZED_MAX_SESSION_MINUTES", 20)
+        )
+    return float(getattr(settings, "STUDY_PROFILE_GENERIC_MAX_SESSION_MINUTES", 20))
+
+
 def get_profile(condition: str) -> StudyProfile:
     if condition == Participant.Condition.PERSONALIZED:
         return StudyProfile(
-            max_session_wall_minutes=int(
-                getattr(settings, "STUDY_PROFILE_PERSONALIZED_MAX_SESSION_MINUTES", 20)
+            max_session_wall_minutes=_wall_minutes_for_condition(
+                Participant.Condition.PERSONALIZED
             ),
             memory_enabled=True,
             allow_character_selection=True,
@@ -53,8 +64,8 @@ def get_profile(condition: str) -> StudyProfile:
             ),
         )
     return StudyProfile(
-        max_session_wall_minutes=int(
-            getattr(settings, "STUDY_PROFILE_GENERIC_MAX_SESSION_MINUTES", 20)
+        max_session_wall_minutes=_wall_minutes_for_condition(
+            Participant.Condition.GENERIC
         ),
         memory_enabled=False,
         allow_character_selection=False,

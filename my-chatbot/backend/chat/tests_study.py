@@ -33,6 +33,7 @@ def _register_payload(code, display_name="Kid", pin="1234"):
     STUDY_TOTAL_WEEKS=2,
     STUDY_PROFILE_PERSONALIZED_MAX_SESSION_MINUTES=20,
     STUDY_PROFILE_GENERIC_MAX_SESSION_MINUTES=20,
+    STUDY_DEV_SESSION_CAP_SECONDS=0,
     STUDY_PIN_MIN_LENGTH=4,
     STUDY_PIN_MAX_LENGTH=6,
     STUDY_LOGIN_CODE_LENGTH=10,
@@ -375,7 +376,11 @@ class StudyApiTests(TestCase):
         self.assertEqual(r.status_code, 401)
 
 
-@override_settings(STUDY_PIN_MIN_LENGTH=4, STUDY_PIN_MAX_LENGTH=6)
+@override_settings(
+    STUDY_PIN_MIN_LENGTH=4,
+    STUDY_PIN_MAX_LENGTH=6,
+    STUDY_DEV_SESSION_CAP_SECONDS=0,
+)
 class StudyValidationTests(TestCase):
     def test_pin_validation(self):
         self.assertIsNone(validate_pin_pair("1234", "1234"))

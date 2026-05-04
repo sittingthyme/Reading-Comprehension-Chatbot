@@ -221,6 +221,13 @@ STUDY_PROFILE_PERSONALIZED_MAX_SESSION_MINUTES = int(
 STUDY_PROFILE_GENERIC_MAX_SESSION_MINUTES = int(
     os.getenv("STUDY_PROFILE_GENERIC_MAX_SESSION_MINUTES", "20")
 )
+# Optional wall-clock cap in seconds for BOTH study arms (overrides minute settings when > 0).
+# Unset: 5 seconds when DEBUG else 0 (use minute caps). Set "0" to force minute caps even in DEBUG.
+_study_dev_cap_raw = os.getenv("STUDY_DEV_SESSION_CAP_SECONDS", "").strip()
+if _study_dev_cap_raw != "":
+    STUDY_DEV_SESSION_CAP_SECONDS = max(0, int(_study_dev_cap_raw))
+else:
+    STUDY_DEV_SESSION_CAP_SECONDS = 5 if DEBUG else 0
 STUDY_PROFILE_PERSONALIZED_DEFAULT_CHARACTER = os.getenv(
     "STUDY_PROFILE_PERSONALIZED_DEFAULT_CHARACTER",
     "default",

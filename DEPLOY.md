@@ -30,7 +30,7 @@ On **Heroku**, the [`Procfile`](my-chatbot/backend/Procfile) `release:` line run
 | `CORS_TRUST_ONRENDER` | On Render, defaults to allowing `https://*.onrender.com` when `RENDER` is set, so the SPA and API on different `*.onrender.com` hostnames can talk without hand-copying URLs. Set `false` if you use only explicit `CORS_ALLOWED_ORIGINS`. |
 | `FRONTEND_ORIGIN` | Optional: exact `https://` origin of the static app for `CSRF_TRUSTED_ORIGINS` (Django has no CORS-style regex for CSRF). |
 | `OPENAI_API_KEY` | Required for chat. |
-| `STUDY_*` | Enrollment codes, `STUDY_START_DATE`, `STUDY_TIMEZONE`, PIN/login settings. **`STUDY_TOTAL_WEEKS`** (default **3**) × **3 slots per week** = **9 study sessions** total. Per-session **wall-clock** length is **`STUDY_PROFILE_PERSONALIZED_MAX_SESSION_MINUTES`** / **`STUDY_PROFILE_GENERIC_MAX_SESSION_MINUTES`** (default **20** each). |
+| `STUDY_*` | Enrollment codes, `STUDY_START_DATE`, `STUDY_TIMEZONE`, PIN/login settings. **`STUDY_TOTAL_WEEKS`** (default **3**) × **3 slots per week** = **9 study sessions** total. Per-session **wall-clock** length is **`STUDY_PROFILE_PERSONALIZED_MAX_SESSION_MINUTES`** / **`STUDY_PROFILE_GENERIC_MAX_SESSION_MINUTES`** (default **20** each). When **`STUDY_DEV_SESSION_CAP_SECONDS`** is **> 0**, it overrides both arms to that many seconds (for QA). With **`DEBUG=False`**, leave it unset or **0** so minute-based caps apply. |
 
 With `DEBUG=False`, session/CSRF cookies use the `Secure` flag; serve the site over HTTPS. Set `SECURE_SSL_REDIRECT=true` if appropriate for your reverse proxy.
 
