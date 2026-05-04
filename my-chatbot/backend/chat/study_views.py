@@ -12,9 +12,9 @@ from django.db import IntegrityError, transaction
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 
-from .models import Conversation, Participant, StudySession
+from .models import Conversation, Participant, StudySession, SurveyResponse
 from .study_config import allowed_character, get_profile, resolve_enrollment_code
 from .study_credentials import (
     generate_login_code,
@@ -35,6 +35,14 @@ from .study_services import (
     touch_activity,
     validate_likert,
 )
+from .caiq_panas_items import (
+    expected_item_ids,
+    linear_session_number,
+    survey_definition_payload,
+    survey_items_for_version,
+    survey_version_for_session,
+)
+from .caiq_panas_scoring import compute_scores
 
 
 def _bearer_token(request) -> Optional[str]:
@@ -311,7 +319,8 @@ def study_heartbeat(request):
 
 @csrf_exempt
 @require_POST
-def study_session_complete(request):
+def study_reading_questionnaire(request):
+    """Save likert + comprehension (slot 3) without completing the study session."""
     participant, err = _require_participant(request)
     if err:
         return err
@@ -349,28 +358,166 @@ def study_session_complete(request):
             )
 
     now = timezone.now()
-    ss.status = StudySession.Status.COMPLETED
-    ss.ended_at = now
     ss.end_reason = end_reason
     ss.likert_responses = likert
     if ss.slot_index == 3:
         ss.comprehension_responses = comprehension
+    ss.reading_questionnaire_submitted_at = now
     ss.save(
         update_fields=[
-            "status",
-            "ended_at",
             "end_reason",
             "likert_responses",
             "comprehension_responses",
+            "reading_questionnaire_submitted_at",
         ]
     )
+
+    return JsonResponse({"ok": True, "progress": progress_dict(participant)})
+
+
+@csrf_exempt
+@require_GET
+def study_survey_definition(request):
+    participant, err = _require_participant(request)
+    if err:
+        return err
+    sid = request.GET.get("studySessionId") or request.GET.get("study_session_id")
+    if not sid:
+        return JsonResponse({"error": "studySessionId required"}, status=400)
+    try:
+        ss = StudySession.objects.get(id=sid, participant=participant)
+    except StudySession.DoesNotExist:
+        return JsonResponse({"error": "Study session not found"}, status=404)
+
+    if ss.status != StudySession.Status.IN_PROGRESS:
+        return JsonResponse(
+            {"error": "Session is not in progress", "status": ss.status}, status=400
+        )
+
+    ver = survey_version_for_session(ss.week_index, ss.slot_index)
+    if not ver:
+        return JsonResponse({"error": "No survey for this session"}, status=400)
+
+    payload = survey_definition_payload(ver)
+    payload["studySessionId"] = str(ss.id)
+    payload["sessionNumber"] = linear_session_number(ss.week_index, ss.slot_index)
+    return JsonResponse(payload)
+
+
+@csrf_exempt
+@require_POST
+def study_caiq_panas_submit(request):
+    participant, err = _require_participant(request)
+    if err:
+        return err
+    body = _json_body(request)
+    sid = body.get("studySessionId") or body.get("study_session_id")
+    answers = body.get("answers") or body.get("responses")
+
+    if not sid:
+        return JsonResponse({"error": "studySessionId required"}, status=400)
+    try:
+        ss = StudySession.objects.get(id=sid, participant=participant)
+    except StudySession.DoesNotExist:
+        return JsonResponse({"error": "Study session not found"}, status=404)
+
+    if ss.status != StudySession.Status.IN_PROGRESS:
+        return JsonResponse(
+            {"error": "Session is not in progress", "status": ss.status}, status=400
+        )
+
+    if not ss.reading_questionnaire_submitted_at:
+        return JsonResponse(
+            {"error": "reading questionnaire must be submitted first"}, status=400
+        )
+
+    if ss.caiq_panas_submitted_at:
+        return JsonResponse({"error": "survey already submitted"}, status=400)
+
+    ver = survey_version_for_session(ss.week_index, ss.slot_index)
+    if not ver:
+        return JsonResponse({"error": "No survey for this session"}, status=400)
+
+    expected = expected_item_ids(ver)
+    if not isinstance(answers, list):
+        return JsonResponse({"error": "answers must be a list of {itemId, value}"}, status=400)
+
+    by_id: dict[str, int] = {}
+    for row in answers:
+        if not isinstance(row, dict):
+            return JsonResponse({"error": "invalid answer row"}, status=400)
+        iid = (row.get("itemId") or row.get("item_id") or "").strip()
+        val = row.get("value")
+        if not iid or not isinstance(val, int) or val < 1 or val > 5:
+            return JsonResponse({"error": f"invalid value for {iid!r}"}, status=400)
+        by_id[iid] = val
+
+    if sorted(by_id.keys()) != sorted(expected):
+        return JsonResponse(
+            {"error": "answers must include exactly the expected item ids", "expected": expected},
+            status=400,
+        )
+
+    items = {it.item_id: it for it in survey_items_for_version(ver)}
+    pcode = (participant.login_code or str(participant.id))[:32]
+    now = timezone.now()
+    sn = linear_session_number(ss.week_index, ss.slot_index)
+
+    try:
+        scores = compute_scores(ver, by_id)
+    except ValueError as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+    rows = [
+        SurveyResponse(
+            study_session=ss,
+            participant=participant,
+            participant_code=pcode,
+            condition=participant.condition,
+            session_number=sn,
+            survey_version=ver,
+            item_id=iid,
+            item_text=items[iid].text,
+            value=by_id[iid],
+            completion_status=SurveyResponse.CompletionStatus.COMPLETE,
+        )
+        for iid in expected
+    ]
+
+    with transaction.atomic():
+        SurveyResponse.objects.bulk_create(rows)
+        ss.caiq_panas_submitted_at = now
+        ss.survey_scores = scores
+        ss.status = StudySession.Status.COMPLETED
+        ss.ended_at = now
+        ss.save(
+            update_fields=[
+                "caiq_panas_submitted_at",
+                "survey_scores",
+                "status",
+                "ended_at",
+            ]
+        )
 
     if ss.conversation:
         merge_conversation_into_memory(participant, ss.conversation)
 
     refresh_session_availability(participant)
 
-    return JsonResponse({"ok": True, "progress": progress_dict(participant)})
+    return JsonResponse({"ok": True, "scores": scores, "progress": progress_dict(participant)})
+
+
+@csrf_exempt
+@require_POST
+def study_session_complete(request):
+    """Deprecated: use reading-questionnaire then caiq-panas-submit."""
+    return JsonResponse(
+        {
+            "error": "This endpoint is deprecated. Submit POST /api/study/session/reading-questionnaire/ then POST /api/study/session/caiq-panas/.",
+            "deprecated": True,
+        },
+        status=410,
+    )
 
 
 @csrf_exempt

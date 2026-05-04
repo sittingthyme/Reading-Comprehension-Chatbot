@@ -4,6 +4,7 @@ import NameInput from "./NameInput.jsx";
 import CharacterSelection from "./CharacterSelection.jsx";
 import Chat from "./Chat.jsx";
 import PostSessionSurvey from "./PostSessionSurvey.jsx";
+import CaiqPanasSurvey from "./CaiqPanasSurvey.jsx";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -40,7 +41,7 @@ export default function StudySessionDashboard({ authToken, onLogout }) {
     () => localStorage.getItem("userName") || ""
   );
   const [selectedCharacter, setSelectedCharacter] = useState(readStoredCharacterKey);
-  const [phase, setPhase] = useState("lobby"); // lobby | name | character | chat | survey
+  const [phase, setPhase] = useState("lobby"); // lobby | name | character | chat | survey | caiq
   const [playPayload, setPlayPayload] = useState(null);
   const [surveyCtx, setSurveyCtx] = useState(null);
 
@@ -83,12 +84,31 @@ export default function StudySessionDashboard({ authToken, onLogout }) {
     };
   }, [authToken, onLogout]);
 
+  useEffect(() => {
+    if (phase !== "chat" || !playPayload?.studySessionId) return;
+    const onBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue =
+        "Ainda tens de completar o questionário de leitura e o CAIQ-PANAS antes de saires.";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [phase, playPayload?.studySessionId]);
+
   const condition = progress?.condition;
   const personalized = condition === "personalized";
   const needCharacter =
     progress?.allowCharacterSelection && personalized;
 
   const beginStartFlow = () => {
+    if (
+      progress?.focusStatus === "in_progress" &&
+      progress.readingQuestionnaireSubmitted &&
+      !progress.caiqPanasSubmitted
+    ) {
+      setPhase("caiq");
+      return;
+    }
     if (needCharacter && !username?.trim()) {
       setPhase("name");
       return;
@@ -151,10 +171,14 @@ export default function StudySessionDashboard({ authToken, onLogout }) {
     setPhase("chat");
   };
 
-  const handleSurveyDone = async () => {
-    setSurveyCtx(null);
-    setPlayPayload(null);
+  const handleReadingQuestionnaireDone = () => {
+    setPhase("caiq");
+  };
+
+  const handleCaiqDone = async () => {
     setPhase("lobby");
+    setPlayPayload(null);
+    setSurveyCtx(null);
     await loadProgress();
   };
 
@@ -211,11 +235,33 @@ export default function StudySessionDashboard({ authToken, onLogout }) {
         studySessionId={playPayload.studySessionId}
         slotIndex={surveyCtx.slotIndex}
         endReason={surveyCtx.endReason}
-        onDone={handleSurveyDone}
+        onDone={handleReadingQuestionnaireDone}
         onCancel={() => {
           setSurveyCtx(null);
           setPhase("chat");
         }}
+      />
+    );
+  }
+
+  if (phase === "caiq") {
+    const sid = playPayload?.studySessionId || progress?.focusSessionId;
+    if (!sid) {
+      return (
+        <div className="study-lobby">
+          <p className="enroll-error">Sessão inválida. Volta ao painel.</p>
+          <button type="button" className="study-secondary-btn" onClick={() => setPhase("lobby")}>
+            Voltar
+          </button>
+        </div>
+      );
+    }
+    return (
+      <CaiqPanasSurvey
+        authToken={authToken}
+        studySessionId={sid}
+        onDone={handleCaiqDone}
+        onBack={() => setPhase("lobby")}
       />
     );
   }
@@ -286,7 +332,13 @@ export default function StudySessionDashboard({ authToken, onLogout }) {
 
   let primaryButtonLabel = "Começar sessão";
   if (canStart) {
-    if (!needCharacter) {
+    if (
+      focus === "in_progress" &&
+      progress?.readingQuestionnaireSubmitted &&
+      !progress?.caiqPanasSubmitted
+    ) {
+      primaryButtonLabel = "Continuar questionário CAIQ-PANAS";
+    } else if (!needCharacter) {
       primaryButtonLabel =
         focus === "in_progress" ? "Continuar sessão" : "Começar sessão";
     } else if (!username?.trim()) {

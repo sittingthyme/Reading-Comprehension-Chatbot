@@ -57,7 +57,7 @@ export default function PostSessionSurvey({
           main_response: comprehension.trim(),
         };
       }
-      const res = await fetch(`${API_URL}/api/study/session/complete/`, {
+      const res = await fetch(`${API_URL}/api/study/session/reading-questionnaire/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

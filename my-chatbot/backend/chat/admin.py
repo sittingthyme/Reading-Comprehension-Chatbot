@@ -1,6 +1,24 @@
 from django.contrib import admin
 
-from .models import Conversation, Participant, StudySession
+from .models import Conversation, Participant, StudySession, SurveyResponse
+
+
+@admin.register(SurveyResponse)
+class SurveyResponseAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "participant_code",
+        "condition",
+        "session_number",
+        "survey_version",
+        "item_id",
+        "value",
+        "recorded_at",
+        "completion_status",
+    )
+    list_filter = ("survey_version", "session_number", "condition")
+    search_fields = ("participant_code", "item_id")
+    raw_id_fields = ("participant", "study_session")
 
 
 @admin.register(Conversation)

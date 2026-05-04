@@ -13,6 +13,10 @@ from django.utils import timezone
 
 from .models import Conversation, Participant, StudySession
 from .study_config import get_profile
+from .caiq_panas_items import (
+    linear_session_number,
+    survey_version_for_session,
+)
 
 
 def participant_from_token(token: Optional[str]) -> Optional[Participant]:
@@ -255,6 +259,16 @@ def progress_dict(participant: Participant) -> Dict[str, Any]:
         payload["focusStatus"] = current.status
         payload["showComprehension"] = current.slot_index == 3
         payload["showLikert"] = True
+        sn = linear_session_number(current.week_index, current.slot_index)
+        sv = survey_version_for_session(current.week_index, current.slot_index)
+        payload["focusSessionNumber"] = sn
+        payload["focusSurveyVersion"] = sv
+        payload["readingQuestionnaireSubmitted"] = bool(
+            current.reading_questionnaire_submitted_at
+        )
+        payload["caiqPanasSubmitted"] = bool(current.caiq_panas_submitted_at)
+        if current.conversation_id:
+            payload["resumeConversationId"] = str(current.conversation_id)
         if current.status == StudySession.Status.IN_PROGRESS:
             sul = seconds_until_wall_lock(current, participant)
             lock_reason = chat_should_lock(current, participant)

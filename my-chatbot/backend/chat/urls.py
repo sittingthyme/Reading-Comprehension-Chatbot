@@ -13,6 +13,21 @@ urlpatterns = [
     path("study/progress/", study_views.study_progress, name="study_progress"),
     path("study/session/start/", study_views.study_session_start, name="study_session_start"),
     path("study/session/heartbeat/", study_views.study_heartbeat, name="study_heartbeat"),
+    path(
+        "study/session/reading-questionnaire/",
+        study_views.study_reading_questionnaire,
+        name="study_reading_questionnaire",
+    ),
+    path(
+        "study/session/survey-definition/",
+        study_views.study_survey_definition,
+        name="study_survey_definition",
+    ),
+    path(
+        "study/session/caiq-panas/",
+        study_views.study_caiq_panas_submit,
+        name="study_caiq_panas_submit",
+    ),
     path("study/session/complete/", study_views.study_session_complete, name="study_session_complete"),
     path("study/session/exit/", study_views.study_session_exit, name="study_session_exit"),
 ]

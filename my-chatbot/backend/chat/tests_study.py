@@ -4,7 +4,7 @@ import secrets
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
-from .models import Conversation, Participant, StudySession
+from .models import Conversation, Participant, StudySession, SurveyResponse
 from .study_credentials import validate_pin_pair
 from .study_services import (
     bootstrap_study_sessions,
@@ -112,10 +112,9 @@ class StudyApiTests(TestCase):
             HTTP_AUTHORIZATION=f"Bearer {token}",
         )
         self.assertEqual(r_start.status_code, 200)
-        conv_id = json.loads(r_start.content)["conversationId"]
 
-        r_done = self.client.post(
-            "/api/study/session/complete/",
+        r_read = self.client.post(
+            "/api/study/session/reading-questionnaire/",
             data=json.dumps(
                 {
                     "studySessionId": sid,
@@ -126,7 +125,32 @@ class StudyApiTests(TestCase):
             content_type="application/json",
             HTTP_AUTHORIZATION=f"Bearer {token}",
         )
-        self.assertEqual(r_done.status_code, 200)
+        self.assertEqual(r_read.status_code, 200)
+
+        defn = json.loads(
+            self.client.get(
+                f"/api/study/session/survey-definition/?studySessionId={sid}",
+                HTTP_AUTHORIZATION=f"Bearer {token}",
+            ).content
+        )
+        self.assertEqual(defn["surveyVersion"], "full")
+        self.assertEqual(len(defn["items"]), 29)
+
+        answers = [{"itemId": it["itemId"], "value": 3} for it in defn["items"]]
+        r_caiq = self.client.post(
+            "/api/study/session/caiq-panas/",
+            data=json.dumps({"studySessionId": sid, "answers": answers}),
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+        self.assertEqual(r_caiq.status_code, 200, r_caiq.content)
+
+        ss_done = StudySession.objects.get(id=sid)
+        self.assertEqual(ss_done.survey_scores.get("version"), "full")
+        self.assertEqual(ss_done.survey_scores.get("caiqTotalMean"), 3.0)
+        self.assertEqual(ss_done.survey_scores.get("panasPositiveMean"), 3.0)
+        self.assertEqual(ss_done.survey_scores.get("panasNegativeMean"), 3.0)
+        self.assertEqual(ss_done.survey_scores.get("overallAffect"), 0.0)
 
         prog2 = json.loads(
             self.client.get(
@@ -134,6 +158,60 @@ class StudyApiTests(TestCase):
             ).content
         )
         self.assertEqual(prog2["focusSlotIndex"], 2)
+        self.assertEqual(SurveyResponse.objects.filter(study_session_id=sid).count(), 29)
+
+    def test_reading_only_does_not_unlock(self):
+        r = self.client.post(
+            "/api/study/register/",
+            data=_register_payload("TEST-P"),
+            content_type="application/json",
+        )
+        token = json.loads(r.content)["authToken"]
+        prog = json.loads(
+            self.client.get(
+                "/api/study/progress/", HTTP_AUTHORIZATION=f"Bearer {token}"
+            ).content
+        )
+        sid = prog["focusSessionId"]
+        self.client.post(
+            "/api/study/session/start/",
+            data=json.dumps(
+                {
+                    "studySessionId": sid,
+                    "userName": "A",
+                    "character": "default",
+                    "initialMessage": "Hi.",
+                }
+            ),
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+        self.client.post(
+            "/api/study/session/reading-questionnaire/",
+            data=json.dumps(
+                {
+                    "studySessionId": sid,
+                    "endReason": "completed_content",
+                    "likert": {"rapport": 4, "closeness": 3, "flow": 5},
+                }
+            ),
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+        prog2 = json.loads(
+            self.client.get(
+                "/api/study/progress/", HTTP_AUTHORIZATION=f"Bearer {token}"
+            ).content
+        )
+        self.assertEqual(prog2["focusSlotIndex"], 1)
+
+    def test_session_complete_deprecated(self):
+        r = self.client.post(
+            "/api/study/session/complete/",
+            data=json.dumps({"studySessionId": "00000000-0000-0000-0000-000000000000"}),
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 410)
 
     def test_slot3_requires_comprehension(self):
         p = Participant.objects.create(
@@ -164,7 +242,7 @@ class StudyApiTests(TestCase):
         third.save()
 
         r = self.client.post(
-            "/api/study/session/complete/",
+            "/api/study/session/reading-questionnaire/",
             data=json.dumps(
                 {
                     "studySessionId": str(third.id),
@@ -178,7 +256,7 @@ class StudyApiTests(TestCase):
         self.assertEqual(r.status_code, 400)
 
         r_ok = self.client.post(
-            "/api/study/session/complete/",
+            "/api/study/session/reading-questionnaire/",
             data=json.dumps(
                 {
                     "studySessionId": str(third.id),
@@ -191,6 +269,26 @@ class StudyApiTests(TestCase):
             HTTP_AUTHORIZATION=f"Bearer {p.auth_token}",
         )
         self.assertEqual(r_ok.status_code, 200)
+
+        defn = json.loads(
+            self.client.get(
+                f"/api/study/session/survey-definition/?studySessionId={third.id}",
+                HTTP_AUTHORIZATION=f"Bearer {p.auth_token}",
+            ).content
+        )
+        self.assertEqual(defn["surveyVersion"], "mini")
+        answers = [{"itemId": it["itemId"], "value": 4} for it in defn["items"]]
+        r_c = self.client.post(
+            "/api/study/session/caiq-panas/",
+            data=json.dumps({"studySessionId": str(third.id), "answers": answers}),
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {p.auth_token}",
+        )
+        self.assertEqual(r_c.status_code, 200)
+        self.assertEqual(SurveyResponse.objects.filter(study_session=third).count(), 10)
+        third.refresh_from_db()
+        self.assertEqual(third.survey_scores.get("version"), "mini")
+        self.assertEqual(third.survey_scores.get("overallAffectMini"), 0.0)
 
     def test_wall_lock_rejects_save_message(self):
         p = Participant.objects.create(

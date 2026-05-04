@@ -102,6 +102,21 @@ class StudySession(models.Model):
     end_reason = models.CharField(max_length=40, blank=True)
     comprehension_responses = models.JSONField(null=True, blank=True)
     likert_responses = models.JSONField(null=True, blank=True)
+    reading_questionnaire_submitted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Likert + comprehension (slot 3) saved; CAIQ-PANAS may still be pending.",
+    )
+    caiq_panas_submitted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="CAIQ-PANAS batch saved before session completion.",
+    )
+    survey_scores = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Aggregates from CAIQ-PANAS scoring after successful survey submit.",
+    )
 
     class Meta:
         constraints = [
@@ -114,3 +129,50 @@ class StudySession(models.Model):
 
     def __str__(self):
         return f"{self.participant_id} W{self.week_index}S{self.slot_index} {self.status}"
+
+
+class SurveyResponse(models.Model):
+    """One row per CAIQ-PANAS item answer (long-form export)."""
+
+    class SurveyVersion(models.TextChoices):
+        FULL = "full", "Full"
+        MINI = "mini", "Mini"
+
+    class CompletionStatus(models.TextChoices):
+        COMPLETE = "complete", "Complete"
+        PARTIAL = "partial", "Partial"
+
+    id = models.BigAutoField(primary_key=True)
+    study_session = models.ForeignKey(
+        StudySession,
+        on_delete=models.CASCADE,
+        related_name="survey_responses",
+    )
+    participant = models.ForeignKey(
+        Participant,
+        on_delete=models.CASCADE,
+        related_name="survey_responses",
+    )
+    participant_code = models.CharField(
+        max_length=32,
+        db_index=True,
+        help_text="Login code (or fallback id) at submission time.",
+    )
+    condition = models.CharField(max_length=20)
+    session_number = models.PositiveSmallIntegerField()
+    survey_version = models.CharField(max_length=10, choices=SurveyVersion.choices)
+    item_id = models.CharField(max_length=32, db_index=True)
+    item_text = models.TextField()
+    value = models.PositiveSmallIntegerField()
+    recorded_at = models.DateTimeField(auto_now_add=True)
+    completion_status = models.CharField(
+        max_length=16,
+        choices=CompletionStatus.choices,
+        default=CompletionStatus.COMPLETE,
+    )
+
+    class Meta:
+        ordering = ["study_session_id", "item_id"]
+
+    def __str__(self):
+        return f"{self.participant_code} S{self.session_number} {self.item_id}={self.value}"
