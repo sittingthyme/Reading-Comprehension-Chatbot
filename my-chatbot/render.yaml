@@ -30,8 +30,13 @@ services:
           property: connectionString
       - key: DATABASE_SSL_REQUIRE
         value: "true"
-
-  # No rootDir: static publish path is from the repo root (see Render monorepo docs).
+      # 3 weeks × 3 slots = 9 sessions; 20 minute wall per session (both study arms)
+      - key: STUDY_TOTAL_WEEKS
+        value: "3"
+      - key: STUDY_PROFILE_PERSONALIZED_MAX_SESSION_MINUTES
+        value: "20"
+      - key: STUDY_PROFILE_GENERIC_MAX_SESSION_MINUTES
+        value: "20"
   # Build explicitly enters my-chatbot/ so Vite outputs to my-chatbot/dist.
   - type: web
     name: reading-chatbot-frontend

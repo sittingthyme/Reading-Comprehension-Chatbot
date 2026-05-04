@@ -194,7 +194,7 @@ if not DEBUG:
     X_FRAME_OPTIONS = 'DENY'
 
 # -----------------------------------------------------------------------------
-# Study gating (sequential sessions, dual arms, 20m wall lock)
+# Study gating (3 weeks × 3 slots = 9 sessions by default; dual arms; 20m wall lock per session)
 # -----------------------------------------------------------------------------
 # Comma-separated enrollment codes per arm (defaults allow local dev without .env).
 STUDY_CODES_PERSONALIZED = os.getenv(
@@ -209,7 +209,7 @@ STUDY_CODES_GENERIC = os.getenv(
 STUDY_START_DATE = os.getenv("STUDY_START_DATE", "2020-01-01")
 # IANA timezone for week boundaries and session clock.
 STUDY_TIMEZONE = os.getenv("STUDY_TIMEZONE", "UTC")
-STUDY_TOTAL_WEEKS = int(os.getenv("STUDY_TOTAL_WEEKS", "8"))
+STUDY_TOTAL_WEEKS = int(os.getenv("STUDY_TOTAL_WEEKS", "3"))
 STUDY_INACTIVITY_SECONDS = int(os.getenv("STUDY_INACTIVITY_SECONDS", "600"))
 STUDY_HEARTBEAT_MAX_DELTA_SECONDS = int(
     os.getenv("STUDY_HEARTBEAT_MAX_DELTA_SECONDS", "120")

@@ -32,12 +32,14 @@ from .study_services import (
 # ------------------------------
 openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+# Assigned reading for all study/chat sessions (system prompt only; no frontend copy).
+ASSIGNED_READING_BOOK = "Os Piratas"
+
 # ------------------------------
 # 1) Persona prompts (you can extend/trim)
 # ------------------------------
 DEFAULT_PROMPT = (
     # "ALL RESPONSES SHOULD BE IN EUROPEAN PORTUGUESE."
-    "Make the first question about what book they are currently reading. "
     "You are a neutral, encouraging reading coach for 10–12 year olds. "
     "Never spoil any part of the book. Only talk about parts the children have read up to."
     "Keep answers short and clear (3–5 sentences total). Avoid spoilers. "
@@ -197,6 +199,16 @@ def _name_prompt(user_name: str) -> str:
         "If the student asks what their name is, answer directly with their name."
     )
 
+
+def _assigned_reading_prompt() -> str:
+    return (
+        f"ASSIGNED READING: The student is working with the book «{ASSIGNED_READING_BOOK}». "
+        "Assume this is the only book in scope unless the student explicitly contradicts it. "
+        "Do not ask what book they are reading or what the title is unless they say they are reading something else or are confused. "
+        "Never spoil beyond what the child indicates they have read so far."
+    )
+
+
 def build_system_prompt(
     character_key: str,
     user_name: str,
@@ -208,6 +220,7 @@ def build_system_prompt(
 
     # Always include name guidance (even for default), so the model actually uses it
     base = persona + "\n\n" + _name_prompt(user_name) + "\n\n"
+    base += _assigned_reading_prompt() + "\n\n"
 
     if character_key != "default":
         base += DEFAULT_PROMPT + "\n\n" + COACHING_PROMPT + "\n\n"

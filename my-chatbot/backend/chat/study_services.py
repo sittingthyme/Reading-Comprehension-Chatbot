@@ -66,7 +66,7 @@ def released_week_index() -> int:
 
 
 def total_study_weeks() -> int:
-    return max(1, int(getattr(settings, "STUDY_TOTAL_WEEKS", 8)))
+    return max(1, int(getattr(settings, "STUDY_TOTAL_WEEKS", 3)))
 
 
 def bootstrap_study_sessions(participant: Participant) -> None:
