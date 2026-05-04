@@ -129,51 +129,66 @@ export default function CaiqPanasSurvey({ authToken, studySessionId, onDone, onB
           <h2 className="hero-title">CAIQ</h2>
           <p className="hero-sub">{def.caiqInstruction}</p>
           <p className="likert-legend">{def.caiqScaleHeader}</p>
-          <p className="likert-emoji-row" aria-hidden="true">
-            {def.caiqRowEmojis}
-          </p>
-          {caiqItems.map((it) => (
-            <fieldset key={it.itemId} className="likert-fieldset">
-              <legend className="likert-question">{it.text}</legend>
-              <div className="likert-scale" role="radiogroup" aria-labelledby={it.itemId}>
-                {CAIQ_VALUES.map(({ v, label }) => (
-                  <label key={v} className="likert-opt">
-                    <input
-                      type="radio"
-                      name={it.itemId}
-                      checked={answers[it.itemId] === v}
-                      onChange={() => setVal(it.itemId, v)}
-                    />
-                    <span className="likert-opt-label">{label}</span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-          ))}
+          {caiqItems.map((it) => {
+            const qid = `caiq-q-${it.itemId}`;
+            return (
+              <fieldset key={it.itemId} className="likert-fieldset">
+                <legend id={qid} className="likert-question">
+                  {it.text}
+                </legend>
+                <div
+                  className="likert-scale likert-scale--stack"
+                  role="radiogroup"
+                  aria-labelledby={qid}
+                >
+                  {CAIQ_VALUES.map(({ v, label }) => (
+                    <label key={v} className="likert-opt">
+                      <input
+                        type="radio"
+                        name={it.itemId}
+                        checked={answers[it.itemId] === v}
+                        onChange={() => setVal(it.itemId, v)}
+                      />
+                      <span className="likert-opt-label">{label}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            );
+          })}
         </section>
 
         <section className="panas-block">
           <h2 className="hero-title">PANAS</h2>
           <p className="hero-sub">{def.panasInstruction}</p>
           <p className="likert-legend">{def.panasScaleHeader}</p>
-          {panasItems.map((it) => (
-            <fieldset key={it.itemId} className="likert-fieldset">
-              <legend className="likert-question">{it.text}</legend>
-              <div className="likert-scale" role="radiogroup">
-                {[1, 2, 3, 4, 5].map((v) => (
-                  <label key={v} className="likert-opt">
-                    <input
-                      type="radio"
-                      name={it.itemId}
-                      checked={answers[it.itemId] === v}
-                      onChange={() => setVal(it.itemId, v)}
-                    />
-                    {v}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-          ))}
+          {panasItems.map((it) => {
+            const qid = `panas-q-${it.itemId}`;
+            return (
+              <fieldset key={it.itemId} className="likert-fieldset">
+                <legend id={qid} className="likert-question">
+                  {it.text}
+                </legend>
+                <div
+                  className="likert-scale likert-scale--inline"
+                  role="radiogroup"
+                  aria-labelledby={qid}
+                >
+                  {[1, 2, 3, 4, 5].map((v) => (
+                    <label key={v} className="likert-opt likert-opt--numeric">
+                      <input
+                        type="radio"
+                        name={it.itemId}
+                        checked={answers[it.itemId] === v}
+                        onChange={() => setVal(it.itemId, v)}
+                      />
+                      <span className="likert-opt-label">{v}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            );
+          })}
         </section>
 
         <div className="toolbar">

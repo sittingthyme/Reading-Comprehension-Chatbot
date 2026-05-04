@@ -6,7 +6,11 @@ function LikertRow({ label, fieldId, value, onChange }) {
   return (
     <div className="likert-row">
       <span id={fieldId}>{label}</span>
-      <div className="likert-scale" role="group" aria-labelledby={fieldId}>
+      <div
+        className="likert-scale likert-scale--inline"
+        role="group"
+        aria-labelledby={fieldId}
+      >
         {[1, 2, 3, 4, 5].map((n) => (
           <label key={n} className="likert-opt">
             <input
